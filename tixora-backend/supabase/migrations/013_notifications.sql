@@ -1,0 +1,30 @@
+-- 013_notifications.sql
+CREATE TYPE notification_type_enum AS ENUM (
+    'BOOKING_CONFIRMED',
+    'PAYMENT_SUCCESS',
+    'PAYMENT_FAILED',
+    'SEAT_HOLD_EXPIRING',
+    'YOUR_TURN',
+    'CINEMA_VERIFIED',
+    'CINEMA_REJECTED',
+    'DOCUMENT_REQUIRED',
+    'DOCUMENT_REJECTED',
+    'PROVIDER_VERIFIED',
+    'AUTHORIZATION_APPROVED',
+    'AUTHORIZATION_REJECTED',
+    'AUTHORIZATION_EXPIRING',
+    'SHOW_CANCELLED',
+    'REFUND_PROCESSED'
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    type notification_type_enum NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    entity_type VARCHAR(100),
+    entity_id UUID,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

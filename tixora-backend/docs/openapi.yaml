@@ -1,0 +1,159 @@
+openapi: 3.0.3
+info:
+  title: TIXORA Cinema OS & Ticketing Platform API
+  description: Production-grade backend API for TIXORA with Redis 3-Minute Seat Holds, RabbitMQ FIFO Queues, and Supabase PostgreSQL final authority.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local Development Server
+
+paths:
+  /auth/signup:
+    post:
+      summary: Register new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 6 }
+                fullName: { type: string }
+                role: { type: string, enum: [CUSTOMER, CINEMA_OWNER, MOVIE_PROVIDER, PLATFORM_ADMIN] }
+      responses:
+        201:
+          description: Created
+
+  /auth/login:
+    post:
+      summary: User authentication
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        200:
+          description: Success
+
+  /movies:
+    get:
+      summary: Public discover movies
+      tags: [Movies]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: genre
+          in: query
+          schema: { type: string }
+      responses:
+        200:
+          description: List of active movies
+
+  /shows/{showId}/seat-map:
+    get:
+      summary: Get interactive visual seat map with real-time statuses
+      tags: [Seat Reservation]
+      parameters:
+        - name: showId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Seat map
+
+  /shows/{showId}/hold:
+    post:
+      summary: Hold seats for 3 minutes (180 seconds)
+      tags: [Seat Reservation]
+      parameters:
+        - name: showId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [seatIds]
+              properties:
+                seatIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        200:
+          description: Hold confirmed for 180 seconds
+        409:
+          description: SEAT_UNAVAILABLE
+
+  /shows/{showId}/seats/{showSeatId}/queue:
+    post:
+      summary: Join contested seat FIFO waiting queue
+      tags: [Seat Reservation]
+      parameters:
+        - name: showId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: showSeatId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Position assigned in waiting queue
+
+  /bookings:
+    post:
+      summary: Create idempotent booking
+      tags: [Bookings]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [showId, holdId, seatIds]
+              properties:
+                showId: { type: string, format: uuid }
+                holdId: { type: string, format: uuid }
+                seatIds: { type: array, items: { type: string, format: uuid } }
+      responses:
+        201:
+          description: Booking created
+
+  /payments/confirm:
+    post:
+      summary: Confirm payment and generate ticket
+      tags: [Payments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentId]
+              properties:
+                paymentId: { type: string, format: uuid }
+      responses:
+        200:
+          description: Ticket generated with QR payload
