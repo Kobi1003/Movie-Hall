@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/uploads/:path*",
+      "destination": "https://tixora-backend-w24j.onrender.com/uploads/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
