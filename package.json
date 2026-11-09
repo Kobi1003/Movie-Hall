@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node tixora-backend/server.js",
+    "build": "npm --prefix tixora-backend install",
+    "postinstall": "npm --prefix tixora-backend install",
+    "start": "cd tixora-backend && node server.js",
     "backend": "cd tixora-backend && npm start",
     "frontend": "cd Frontend && npm run dev",
     "build:frontend": "cd Frontend && npm install && npm run build"
