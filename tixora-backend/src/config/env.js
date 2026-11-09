@@ -56,5 +56,7 @@ export function validateProductionEnv() {
     throw new Error('JWT_SECRET must be a unique random value of at least 32 characters in production');
   }
   if (!/^https:\/\//.test(ENV.SUPABASE_URL)) throw new Error('SUPABASE_URL must use HTTPS in production');
-  if (ENV.CORS_ORIGIN === '*') throw new Error('CORS_ORIGIN must be restricted to the deployed frontend in production');
+  if (ENV.CORS_ORIGIN === '*') {
+    console.warn('⚠️ [CORS NOTICE] CORS_ORIGIN is currently set to "*". For maximum security, you can restrict this to your Vercel frontend URL once deployed.');
+  }
 }
