@@ -1,5 +1,8 @@
 // Universal API Client for Tixora Frontend
-const BASE_URL = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '');
+const BASE_URL = (
+  import.meta.env.VITE_API_URL || 
+  (import.meta.env.PROD ? 'https://tixora-backend-w24j.onrender.com/api/v1' : '/api/v1')
+).replace(/\/$/, '');
 
 export function getAuthToken() {
   return localStorage.getItem('tixora_token') || null;
