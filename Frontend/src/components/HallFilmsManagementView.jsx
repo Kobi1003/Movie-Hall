@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import PartnerWorkflowBar, { PartnerStepFooter, WorkflowLockedGate, PARTNER_STEPS } from './PartnerWorkflowBar';
-import { setPartnerUnlockedStep } from '../utils/workflow';
+import PartnerWorkflowBar, { PartnerStepFooter, WorkflowLockedGate } from './PartnerWorkflowBar';
+import { setPartnerUnlockedStep, PARTNER_STEPS } from '../utils/workflow';
 import {
   Film,
   Plus,
