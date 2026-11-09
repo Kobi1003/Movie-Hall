@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: tixora-backend
+    runtime: node
+    plan: free
+    rootDir: tixora-backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TIXORA_ROOT_ACCESS_KEY
+        value: TIX-098-245
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: EMAILJS_SERVICE_ID
+        sync: false
+      - key: EMAILJS_TEMPLATE_ID
+        sync: false
+      - key: EMAILJS_PUBLIC_KEY
+        sync: false
+      - key: EMAILJS_PRIVATE_KEY
+        sync: false

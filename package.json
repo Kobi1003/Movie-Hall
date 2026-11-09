@@ -1,0 +1,11 @@
+{
+  "name": "movie-hall-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node tixora-backend/server.js",
+    "backend": "cd tixora-backend && npm start",
+    "frontend": "cd Frontend && npm run dev",
+    "build:frontend": "cd Frontend && npm install && npm run build"
+  }
+}
