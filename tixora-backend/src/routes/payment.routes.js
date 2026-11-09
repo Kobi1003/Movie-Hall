@@ -7,7 +7,7 @@ import { createPaymentSchema, confirmPaymentSchema } from '../validators/booking
 
 const router = Router();
 
-router.use(authenticateUser);
+router.use('/payments', authenticateUser);
 
 router.post('/payments/create', validateRequest({ body: createPaymentSchema }), async (req, res, next) => {
   try {

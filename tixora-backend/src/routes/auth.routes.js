@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { AuthService } from '../services/auth.service.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { validateRequest } from '../middleware/validation.js';
-import { signupSchema, loginSchema, updateProfileSchema } from '../validators/auth.validator.js';
+import { signupSchema, loginSchema } from '../validators/auth.validator.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 
@@ -26,6 +26,24 @@ router.post('/login', authLimiter, validateRequest({ body: loginSchema }), async
   }
 });
 
+router.post('/forgot-password/otp', authLimiter, async (req, res, next) => {
+  try {
+    const result = await AuthService.requestPasswordOtp(req.body);
+    return ApiResponse.success(res, result, result.message);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/forgot-password/verify', authLimiter, async (req, res, next) => {
+  try {
+    const result = await AuthService.verifyPasswordOtp(req.body);
+    return ApiResponse.success(res, result, result.message);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/logout', authenticateUser, (req, res) => {
   return ApiResponse.success(res, {}, 'Logout successful');
 });
@@ -37,10 +55,6 @@ router.get('/me', authenticateUser, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
-
-router.post('/forgot-password', authLimiter, (req, res) => {
-  return ApiResponse.success(res, {}, 'Password reset email sent if account exists');
 });
 
 export default router;

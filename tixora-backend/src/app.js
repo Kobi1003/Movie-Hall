@@ -35,6 +35,7 @@ app.use(cors({
   credentials: true
 }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'tixora-backend', 'public', 'uploads')));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

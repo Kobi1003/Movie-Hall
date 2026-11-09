@@ -146,7 +146,7 @@ export default function Navbar({
           <button 
             onClick={() => { 
               if (currentUser?.role === 'partner') {
-                navigateTo('/partner/shows', 'shows-pricing');
+                navigateTo('/partner/films/new', 'add-edit-film');
               } else if (currentUser?.role === 'admin') {
                 navigateTo('/admin/console', 'admin-console');
               } else {
@@ -255,11 +255,11 @@ export default function Navbar({
           {currentUser?.role === 'partner' && (
             <>
               {[
-                { path: '/partner/shows', view: 'shows-pricing', label: 'Shows & Pricing', icon: DollarSign, iconClass: 'text-[#4edea3]' },
-                { path: '/partner/seat-planner', view: 'seat-planner', label: 'Seat Layout Studio', icon: LayoutGrid, iconClass: 'text-[#f43f5e]' },
-                { path: '/partner/films', view: 'film-catalog', label: 'Film Catalog', icon: Film, iconClass: 'text-[#4cd7f6]' },
-                { path: '/partner/films/new', view: 'add-edit-film', label: 'Add / Edit Film', icon: Plus, iconClass: 'text-[#a078ff]' },
-                { path: '/partner/authorizations', view: 'cinema-auth', label: 'Cinema Authorization', icon: Building2, iconClass: 'text-[#fbbf24]' },
+                { path: '/partner/films/new', view: 'add-edit-film', label: '1. Add / Edit Film', icon: Plus, iconClass: 'text-[#a078ff]' },
+                { path: '/partner/seat-planner', view: 'seat-planner', label: '2. Seat Layout Studio', icon: LayoutGrid, iconClass: 'text-[#f43f5e]' },
+                { path: '/partner/authorizations', view: 'cinema-auth', label: '3. Screen Authorization', icon: Building2, iconClass: 'text-[#fbbf24]' },
+                { path: '/partner/films', view: 'film-catalog', label: '4. Film Catalog', icon: Film, iconClass: 'text-[#4cd7f6]' },
+                { path: '/partner/shows', view: 'shows-pricing', label: '5. Shows & Pricing', icon: DollarSign, iconClass: 'text-[#4edea3]' },
               ].map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path || (item.path === '/partner/shows' && location.pathname === '/partner');
@@ -281,42 +281,7 @@ export default function Navbar({
             </>
           )}
 
-          {currentUser?.role === 'admin' && (
-            <>
-              <button
-                onClick={() => navigateTo('/admin/console', 'admin-console')}
-                className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  location.pathname.startsWith('/admin')
-                    ? 'bg-[#292a2e] text-white shadow-sm border border-[#494454]'
-                    : 'text-[#cbc3d7] hover:text-white hover:bg-[#1a1b20]'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4 text-[#d0bcff]" />
-                Admin Console
-              </button>
-              <button
-                onClick={() => navigateTo('/partner/shows', 'shows-pricing')}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  location.pathname.startsWith('/partner')
-                    ? 'bg-[#292a2e] text-white shadow-sm border border-[#494454]'
-                    : 'text-[#cbc3d7] hover:text-white hover:bg-[#1a1b20]'
-                }`}
-              >
-                <Building2 className="w-3.5 h-3.5 text-[#4cd7f6]" />
-                Partner Console
-              </button>
-              <button
-                onClick={() => navigateTo('/discover', 'discover')}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  (location.pathname === '/' || location.pathname === '/discover')
-                    ? 'bg-[#292a2e] text-white shadow-sm border border-[#494454]'
-                    : 'text-[#cbc3d7] hover:text-white hover:bg-[#1a1b20]'
-                }`}
-              >
-                Consumer View
-              </button>
-            </>
-          )}
+
         </nav>
 
         {/* Right Action Rig: Search, City, Notifications, Auth / Profile */}
@@ -546,59 +511,49 @@ export default function Navbar({
                   {currentUser.role === 'partner' && (
                     <>
                       <button
-                        onClick={() => { navigateTo('/partner/shows', 'shows-pricing'); setProfileDropdownOpen(false); }}
+                        onClick={() => { navigateTo('/partner/films/new', 'add-edit-film'); setProfileDropdownOpen(false); }}
                         className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
                       >
-                        <DollarSign className="w-3.5 h-3.5 text-[#4edea3]" />
-                        Shows & Pricing
+                        <Plus className="w-3.5 h-3.5 text-[#a078ff]" />
+                        1. Add / Edit Film
                       </button>
                       <button
                         onClick={() => { navigateTo('/partner/seat-planner', 'seat-planner'); setProfileDropdownOpen(false); }}
                         className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
                       >
                         <LayoutGrid className="w-3.5 h-3.5 text-[#f43f5e]" />
-                        Seat Layout Studio
-                      </button>
-                      <button
-                        onClick={() => { navigateTo('/partner/films', 'film-catalog'); setProfileDropdownOpen(false); }}
-                        className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
-                      >
-                        <Film className="w-3.5 h-3.5 text-[#4cd7f6]" />
-                        Film Catalog
-                      </button>
-                      <button
-                        onClick={() => { navigateTo('/partner/films/new', 'add-edit-film'); setProfileDropdownOpen(false); }}
-                        className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5 text-[#a078ff]" />
-                        Add New Film
+                        2. Seat Layout Studio
                       </button>
                       <button
                         onClick={() => { navigateTo('/partner/authorizations', 'cinema-auth'); setProfileDropdownOpen(false); }}
                         className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
                       >
                         <Building2 className="w-3.5 h-3.5 text-[#fbbf24]" />
-                        Cinema Authorization
+                        3. Screen Authorization
+                      </button>
+                      <button
+                        onClick={() => { navigateTo('/partner/films', 'film-catalog'); setProfileDropdownOpen(false); }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
+                      >
+                        <Film className="w-3.5 h-3.5 text-[#4cd7f6]" />
+                        4. Film Catalog
+                      </button>
+                      <button
+                        onClick={() => { navigateTo('/partner/shows', 'shows-pricing'); setProfileDropdownOpen(false); }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
+                      >
+                        <DollarSign className="w-3.5 h-3.5 text-[#4edea3]" />
+                        5. Shows & Pricing
                       </button>
                     </>
                   )}
 
-                  {currentUser.role === 'admin' && (
-                    <>
-                      <button
-                        onClick={() => { navigateTo('/admin/console', 'admin-console'); setProfileDropdownOpen(false); }}
-                        className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5 text-[#d0bcff]" />
-                        Admin Root Console
-                      </button>
-                    </>
-                  )}
+
 
                   <button
                     onClick={() => {
                       onOpenAuth({ 
-                        role: currentUser.role === 'admin' ? 'customer' : currentUser.role === 'partner' ? 'admin' : 'partner', 
+                        role: currentUser.role === 'partner' ? 'customer' : 'partner', 
                         isSignUp: false 
                       });
                       setProfileDropdownOpen(false);
@@ -606,7 +561,7 @@ export default function Navbar({
                     className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
                   >
                     <Building2 className="w-3.5 h-3.5 text-[#03b5d3]" />
-                    Switch Platform / Role
+                    <span>Switch to {currentUser.role === 'partner' ? 'Consumer View' : 'Cinema Partner'}</span>
                   </button>
 
                   <button
@@ -625,12 +580,12 @@ export default function Navbar({
           ) : (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => onOpenAuth({ role: 'admin', isSignUp: false })}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#181c26] hover:bg-[#202534] border border-[#d0bcff]/30 text-[#d0bcff] font-bold text-xs font-mono transition-all cursor-pointer"
-                title="Super Admin Portal Sign-In"
+                onClick={() => onOpenAuth({ role: 'partner', isSignUp: false })}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#181c26] hover:bg-[#202534] border border-[#03b5d3]/30 text-[#4cd7f6] font-bold text-xs font-mono transition-all cursor-pointer"
+                title="Cinema Hall Provider Access"
               >
-                <Lock className="w-3.5 h-3.5 text-[#d0bcff]" />
-                <span>Admin Portal</span>
+                <Building2 className="w-3.5 h-3.5 text-[#03b5d3]" />
+                <span>Partner Portal</span>
               </button>
               <button
                 onClick={() => onOpenAuth({ role: 'customer', isSignUp: false })}

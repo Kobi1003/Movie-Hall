@@ -52,6 +52,8 @@ export class MemoryStore {
     this.notifications = new Map();
     this.auditLogs = new Map();
     this.cinemaReviews = new Map();
+    this.passwordResetOtps = new Map();
+    this.dispatchedEmails = new Map();
   }
 }
 

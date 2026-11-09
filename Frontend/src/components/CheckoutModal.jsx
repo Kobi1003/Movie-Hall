@@ -50,6 +50,7 @@ export default function CheckoutModal({
 
   // --- STATE MANAGEMENT ---
   const [activeHoldId, setActiveHoldId] = useState(checkoutData?.holdId || null);
+  const holdIdRef = useRef(checkoutData?.holdId || null);
   const [isHolding, setIsHolding] = useState(!checkoutData?.holdId);
   const [holdError, setHoldError] = useState('');
   
@@ -97,7 +98,10 @@ export default function CheckoutModal({
     let isCancelled = false;
 
     const acquireHold = async () => {
-      if (activeHoldId) return; // already held
+      if (holdIdRef.current) {
+        setIsHolding(false);
+        return;
+      }
       setIsHolding(true);
       setHoldError('');
       try {
@@ -105,10 +109,10 @@ export default function CheckoutModal({
           throw new Error('Please select valid seats before initiating booking.');
         }
         const holdRes = await showsApi.holdSeats(showId, selectedSeats.map(s => s.id));
-        if (isCancelled) return;
         if (!holdRes?.holdId) {
           throw new Error('Could not lock seats in Redis. Another user may have just selected them.');
         }
+        holdIdRef.current = holdRes.holdId;
         setActiveHoldId(holdRes.holdId);
         // Start 2-minute countdown (120 seconds)
         const duration = holdRes.customerDurationSeconds || 120;
@@ -118,7 +122,7 @@ export default function CheckoutModal({
           setHoldError(err.message || 'Seat reservation failed. Seats might be held by another user.');
         }
       } finally {
-        if (!isCancelled) setIsHolding(false);
+        setIsHolding(false);
       }
     };
 
@@ -207,7 +211,8 @@ export default function CheckoutModal({
       return;
     }
 
-    if (!activeHoldId) {
+    const currentHoldId = activeHoldId || holdIdRef.current;
+    if (!currentHoldId) {
       setFormError('Seat hold is not active. Please retry.');
       return;
     }
@@ -240,7 +245,7 @@ export default function CheckoutModal({
       // 1. Create booking with Name, Age, Attendees
       const createRes = await bookingsApi.create({
         showId,
-        holdId: activeHoldId,
+        holdId: currentHoldId,
         seatIds: selectedSeats.map(s => s.id),
         foodItems,
         promoCode: promoCode || null,
@@ -783,10 +788,10 @@ export default function CheckoutModal({
           )}
 
           <button
-            disabled={isProcessing || isHolding || !activeHoldId}
+            disabled={isProcessing || isHolding || (!activeHoldId && !holdIdRef.current)}
             onClick={handleConfirmAndPay}
             className={`w-full py-3 rounded-xl font-bold text-xs font-mono flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(160,120,255,0.4)] transition-all ${
-              isProcessing || isHolding || !activeHoldId
+              isProcessing || isHolding || (!activeHoldId && !holdIdRef.current)
                 ? 'bg-[#1e1f24] text-[#64748b] border border-[#292a2e] cursor-not-allowed'
                 : 'bg-gradient-to-r from-[#a078ff] to-[#6d3bd7] text-white hover:brightness-110 active:scale-95 cursor-pointer'
             }`}

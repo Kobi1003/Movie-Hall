@@ -8,7 +8,7 @@ import { createBookingSchema } from '../validators/booking.validator.js';
 
 const router = Router();
 
-router.use(authenticateUser);
+router.use('/bookings', authenticateUser);
 
 // Create Idempotent Booking
 router.post('/bookings', validateRequest({ body: createBookingSchema }), async (req, res, next) => {

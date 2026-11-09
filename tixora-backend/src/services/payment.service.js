@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin, memoryStore } from '../config/supabase.js';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { BookingService } from './booking.service.js';
+import { EmailService } from './email.service.js';
+import { logger } from '../utils/logger.js';
 import { ENV } from '../config/env.js';
 
 export class PaymentService {
@@ -66,6 +68,53 @@ export class PaymentService {
     payment.status = 'SUCCESS';
     payment.updated_at = new Date().toISOString();
     memoryStore.payments.set(paymentId, payment);
+
+    // Dispatch ticket confirmation email via EmailJS
+    try {
+      const detail = await BookingService.getBookingDetail(payment.booking_id);
+      const b = detail?.booking || booking;
+
+      let userProfile = null;
+      const effectiveUserId = userId || b?.user_id;
+      if (effectiveUserId) {
+        try {
+          const { data: p } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', effectiveUserId).maybeSingle();
+          userProfile = p;
+        } catch (_) {}
+        if (!userProfile) userProfile = memoryStore.profiles.get(effectiveUserId);
+      }
+
+      const toEmail = (b?.customer_details?.email || userProfile?.email || '').trim().toLowerCase();
+      const toName = b?.customer_details?.name || userProfile?.full_name || 'Moviegoer';
+
+      const movieTitle = detail?.movie?.title || b?.movies?.title || 'Theatrical Feature';
+      const cinemaName = detail?.cinema?.cinema_name || b?.cinemas?.cinema_name || 'Tixora Partner Cinema';
+      const screenName = detail?.screen?.screen_name || b?.screens?.screen_name || 'Main Screen';
+      const showDate = detail?.show?.show_date || b?.shows?.show_date || 'Today';
+      const startTime = detail?.show?.start_time || b?.shows?.start_time || '7:00 PM';
+      const seats = b?.seats || b?.seat_ids || [];
+      const totalAmount = b?.total_amount || payment?.amount || 0;
+
+      if (toEmail) {
+        logger.info(`[PAYMENT] Dispatching ticket confirmation email to ${toEmail} for booking ${b?.booking_reference}`);
+        EmailService.sendTicketConfirmationEmail({
+          toEmail,
+          toName,
+          bookingReference: b?.booking_reference,
+          movieTitle,
+          cinemaName,
+          screenName,
+          showDate,
+          startTime,
+          seats,
+          totalAmount
+        }).catch(err => logger.warn('[EMAIL] Ticket confirmation email failed:', err.message));
+      } else {
+        logger.warn(`[PAYMENT] Skipped ticket email: No recipient email address found for booking ${b?.id}`);
+      }
+    } catch (e) {
+      logger.warn('[EMAIL] Failed preparing ticket confirmation email:', e.message);
+    }
 
     return { paymentStatus: 'SUCCESS', booking: bookingResult };
   }

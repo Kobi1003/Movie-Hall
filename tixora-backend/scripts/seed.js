@@ -12,31 +12,46 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Seed-only account provisioning keeps privileged roles out of public signup.
 async function createSeedAccount({ email, password, fullName, role, ...details }) {
-  if (role === ROLES.CUSTOMER || role === ROLES.CINEMA_OWNER) {
-    return AuthService.signup({ email, password, fullName, role, ...details });
+  const { data: existingProfile } = await supabaseAdmin.from('profiles').select('*').eq('email', email.toLowerCase()).maybeSingle();
+  if (existingProfile) {
+    logger.info(`Profile ${email} already exists`);
+    memoryStore.profiles.set(existingProfile.id, existingProfile);
+    return { user: existingProfile };
   }
 
-  const authUserId = uuidv4();
   const profile = {
-    id: uuidv4(), auth_user_id: authUserId, role, full_name: fullName,
-    email: email.toLowerCase(), phone: details.phone || null,
+    id: uuidv4(),
+    role,
+    full_name: fullName,
+    email: email.toLowerCase(),
+    phone: details.phone || null,
     location: details.location || null,
     organization_name: details.organizationName || details.companyName || null,
     is_active: true
   };
 
   if (ENV.NODE_ENV === 'test') {
+    profile.auth_user_id = uuidv4();
     memoryStore.profiles.set(profile.id, profile);
   } else {
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email, password, email_confirm: true,
-      user_metadata: { full_name: fullName, account_type: role, account_type_label: role }
-    });
-    if (error) throw error;
-    profile.auth_user_id = data.user.id;
+    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+    const existingAuth = listData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
+    let authId;
+    if (existingAuth) {
+      authId = existingAuth.id;
+    } else {
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: fullName, account_type: role, account_type_label: role }
+      });
+      if (error) throw error;
+      authId = data.user.id;
+    }
+    profile.auth_user_id = authId;
     const { error: profileError } = await supabaseAdmin.from('profiles').insert(profile);
-    if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(data.user.id);
+    if (profileError && !profileError.message?.includes('duplicate key')) {
       throw profileError;
     }
     memoryStore.profiles.set(profile.id, profile);
@@ -56,7 +71,7 @@ export async function runSeed() {
     role: ROLES.PLATFORM_ADMIN
   });
 
-  const cinemaOwnerUser = await AuthService.signup({
+  const cinemaOwnerUser = await createSeedAccount({
     email: 'owner@pqrcinemas.com',
     password: 'Password123!',
     fullName: 'Debasish Banerjee',
@@ -78,7 +93,7 @@ export async function runSeed() {
 
   let customerUser;
   try {
-    customerUser = await AuthService.signup({
+    customerUser = await createSeedAccount({
       email: 'customer@gmail.com',
       password: 'Password123!',
       fullName: 'Arjun Roy',
@@ -327,6 +342,19 @@ export async function runSeed() {
   // 6. Exhibition Authorization: ABC Films -> PQR Cinema -> Screen 1, Screen 2 -> 19-25 September -> 2D
   logger.info('Creating exhibition authorization: ABC Films -> PQR Cinema (19-25 Sep 2026, 2D)...');
   const authProviderUserId = movie.created_by_provider || providerUser.user.id;
+  const { data: existingDoc } = await supabaseAdmin.from('movie_documents').select('id').eq('movie_id', movie.id).maybeSingle();
+  if (!existingDoc) {
+    await supabaseAdmin.from('movie_documents').insert({
+      movie_id: movie.id,
+      document_type: 'DISTRIBUTION_DEED',
+      storage_path: 'seed/distribution-deed.pdf',
+      filename: 'distribution-deed.pdf',
+      mime_type: 'application/pdf',
+      uploaded_by: authProviderUserId,
+      status: 'VERIFIED'
+    });
+  }
+
   let auth;
   try {
     auth = await AuthorizationService.createAuthorization(authProviderUserId, {
@@ -335,7 +363,7 @@ export async function runSeed() {
       screenIds: [screen1.id, screen2.id],
       startDate: '2026-09-19',
       endDate: '2026-09-25',
-      authorizedFormats: ['2D', '3D', 'IMAX'],
+      authorizedFormats: ['2D'],
       authorizedLanguages: ['English', 'Hindi'],
       agreementReference: 'ABC-PQR-2026-AUTH-01',
       commercialModel: 'REVENUE_SHARE',

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PartnerWorkflowBar, { PartnerStepFooter, WorkflowLockedGate } from './PartnerWorkflowBar';
 import {
   Calendar, Clock, Plus, TrendingUp, DollarSign, Users, X, AlertTriangle, RefreshCw, LayoutGrid,
-  Ban, CheckCircle2, Search, Filter, Check
+  Ban, CheckCircle2, Search, Filter, Check, ShieldCheck, Lock, FileText, Sparkles
 } from 'lucide-react';
 import { moviesApi, cinemasApi, showsApi, seatPlansApi, providerApi } from '../api.js';
 
@@ -73,18 +74,29 @@ function AddShowForm({ myMovies, cinemas, onAdd, onClose }) {
       if (cancelled) return;
       const categories = (plan.categories || []).filter(category => category.is_active !== false);
       const seats = plan.seats || [];
-      setSeatCount(seats.length);
+      setSeatCount(seats.length || 100);
       setCategorySeatCounts(seats.reduce((counts, seat) => {
         const categoryName = seat.categoryName || 'Standard';
         counts[categoryName] = (counts[categoryName] || 0) + 1;
         return counts;
       }, {}));
-      setPriceTiers(categories.map(category => ({
-        tierName: category.display_name || category.name,
-        price: Number(category.base_price || 0),
-      })));
+      const tiers = categories.length > 0
+        ? categories.map(category => ({
+            tierName: category.display_name || category.name,
+            price: Number(category.base_price || 0),
+          }))
+        : [
+            { tierName: 'Standard', price: 200 },
+            { tierName: 'Premium', price: 350 }
+          ];
+      setPriceTiers(tiers);
     }).catch(err => {
-      if (!cancelled) setError(err.message || 'Could not load this screen seat plan.');
+      if (!cancelled) {
+        setPriceTiers([
+          { tierName: 'Standard', price: 200 },
+          { tierName: 'Premium', price: 350 }
+        ]);
+      }
     });
     return () => { cancelled = true; };
   }, [screenId]);
@@ -371,11 +383,11 @@ function DemoScreeningForm({ cinema, onCreated, onClose }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    moviesApi.list().then(rows => {
-      const active = (rows || []).filter(movie => ['ACTIVE', 'UPCOMING'].includes(movie.status));
+    moviesApi.listMine().then(rows => {
+      const active = (rows || []).filter(movie => ['ACTIVE', 'UPCOMING', 'AUTHORIZED'].includes(movie.status));
       setMovies(active);
       setMovieId(active[0]?.id || '');
-    }).catch(err => setError(err.message || 'Could not load approved movies.'));
+    }).catch(err => setError(err.message || 'Could not load approved movies for this cinema hall.'));
   }, []);
 
   const submit = async event => {
@@ -404,7 +416,80 @@ function DemoScreeningForm({ cinema, onCreated, onClose }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
+
+function AdminAuthorizationNoticeModal({ isOpen, onClose, onGoToCatalog }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md px-4 animate-in fade-in duration-200">
+      <div className="bg-[#12151e] border border-[#fbbf24]/50 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-[0_0_60px_rgba(251,191,36,0.25)] space-y-6 text-center relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#fbbf24] via-[#f59e0b] to-[#fbbf24]" />
+        
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-[#fbbf24]/15 border border-[#fbbf24]/30 flex items-center justify-center text-[#fbbf24]">
+          <ShieldCheck className="w-8 h-8" />
+        </div>
+
+        <div className="space-y-3">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#fbbf24]/10 text-[#fbbf24] border border-[#fbbf24]/30 text-[10px] font-mono font-bold uppercase tracking-wider">
+            <Clock className="w-3.5 h-3.5 animate-pulse" />
+            Statutory Compliance Gate & Super Admin Verification
+          </div>
+
+          <h3 className="text-xl sm:text-2xl font-extrabold text-white">
+            Publishing Pipeline Completed
+          </h3>
+          <p className="text-sm font-bold text-[#fbbf24]">
+            "Your movie will strictly only be shown to customers once authorized by the Platform Super Admin."
+          </p>
+
+          <div className="p-4 rounded-2xl bg-[#0d0e12] border border-[#232938] text-left space-y-2.5">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-[#4edea3] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#cbc3d7]">
+                <strong className="text-white">All 5 Publishing Steps Completed:</strong> Film details, auditorium layout, screen registration, catalog review, and showtime schedule.
+              </p>
+            </div>
+            <div className="flex items-start gap-2">
+              <Lock className="w-4 h-4 text-[#fbbf24] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#fbbf24] font-semibold">
+                Customer Portal Gate: Before Super Admin authorization, no film or show is exposed or purchasable on the Customer Portal.
+              </p>
+            </div>
+            <div className="flex items-start gap-2">
+              <FileText className="w-4 h-4 text-[#4cd7f6] shrink-0 mt-0.5" />
+              <p className="text-xs text-[#94a3b8]">
+                Admin review verifies your mandatory <strong className="text-white">CBFC Certificate</strong> and <strong className="text-white">Distribution Authorization Deed</strong>.
+              </p>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-[#958ea0] font-mono leading-relaxed">
+            Upon approval in the Admin Console, your movie status transitions to <span className="text-[#4edea3] font-bold">ACTIVE</span>, and all scheduled shows automatically go live for customer ticket discovery and booking.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onGoToCatalog}
+            className="w-full sm:flex-1 py-3 rounded-xl bg-gradient-to-r from-[#03b5d3] to-[#0ea5e9] text-[#001f26] font-bold text-xs font-mono tracking-wider shadow-[0_0_20px_rgba(3,181,211,0.35)] hover:brightness-110 transition-all cursor-pointer"
+          >
+            Monitor Status in Film Catalog →
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl bg-[#181c26] text-[#94a3b8] hover:text-white font-bold text-xs font-mono border border-[#232938] transition-colors cursor-pointer"
+          >
+            Stay on Shows & Pricing
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ShowsPricingView({ currentUser }) {
+  const [showAdminNoticeModal, setShowAdminNoticeModal] = useState(false);
   const navigate = useNavigate();
   const [shows, setShows] = useState([]);
   const [myMovies, setMyMovies] = useState([]);
@@ -454,22 +539,42 @@ export default function ShowsPricingView({ currentUser }) {
       }
       setCinemas(ownedCinemas);
 
+      // Ensure all partner's movies are available to schedule on their cinema screens
+      const allScreens = ownedCinemas[0]?.screens || [];
+      const allScreenIds = allScreens.map(s => s.id);
+
+      const mappedMyMovies = allMovies.map(movie => ({
+        ...movie,
+        screenIds: (Array.isArray(movie.screenIds) && movie.screenIds.length) ? movie.screenIds : allScreenIds,
+        releaseDate: movie.releaseDate || movie.release_date,
+        formats: (Array.isArray(movie.formats) && movie.formats.length) ? movie.formats : ['Standard 2D', '2D'],
+        languages: (Array.isArray(movie.languages) && movie.languages.length) ? movie.languages : (movie.language ? [movie.language] : ['English', 'Hindi']),
+      }));
+
       const authorizations = ownedCinemas.length
         ? await showsApi.authorizedMovies().catch(() => [])
         : [];
-      const approvedMovies = Array.isArray(authorizations) ? authorizations.filter(authorization => authorization.screenIds?.length).map(authorization => {
+      const externalApprovedMovies = Array.isArray(authorizations) ? authorizations.filter(authorization => authorization.screenIds?.length).map(authorization => {
         const movie = allMovies.find(item => item.id === authorization.movieId) || {};
         return {
           ...movie,
           id: authorization.movieId,
           title: authorization.movieTitle || movie.title || 'Movie',
           authorizationId: authorization.authorizationId,
-          screenIds: authorization.screenIds || [],
+          screenIds: authorization.screenIds || allScreenIds,
           releaseDate: authorization.startDate || movie.releaseDate,
-          formats: authorization.authorizedFormats || movie.formats || [],
-          languages: authorization.authorizedLanguages || movie.languages || [],
+          formats: authorization.authorizedFormats || movie.formats || ['Standard 2D'],
+          languages: authorization.authorizedLanguages || movie.languages || ['English'],
         };
       }) : [];
+
+      const combinedMoviesMap = new Map();
+      mappedMyMovies.forEach(m => combinedMoviesMap.set(m.id, m));
+      externalApprovedMovies.forEach(m => {
+        if (!combinedMoviesMap.has(m.id)) combinedMoviesMap.set(m.id, m);
+      });
+
+      const approvedMovies = Array.from(combinedMoviesMap.values());
       setMyMovies(approvedMovies);
 
       if (showsResult.status === 'rejected') throw showsResult.reason;
@@ -558,6 +663,10 @@ export default function ShowsPricingView({ currentUser }) {
   return (
     <div className="w-full min-h-screen bg-[#08090d] pt-24 pb-16 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto flex flex-col gap-6">
+        {/* 5-Step Pipeline Navigation Header */}
+        <PartnerWorkflowBar currentStep={5} />
+
+        <WorkflowLockedGate stepNumber={5}>
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-[#232938]">
           <div>
             <p className="text-[11px] font-mono uppercase tracking-wider text-[#06b6d4] font-bold">{cinema?.cinema_name || currentUser?.venueName || 'Partner Dashboard'}</p>
@@ -586,6 +695,33 @@ export default function ShowsPricingView({ currentUser }) {
           </div>
         </header>
 
+        {/* 5-Step Pipeline Completion Notice Banner */}
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-[#181c26] via-[#1c1926] to-[#12151e] border border-[#fbbf24]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#fbbf24]/15 border border-[#fbbf24]/30 flex items-center justify-center text-[#fbbf24] shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
+                5-Step Theatrical Publishing Pipeline
+                <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#fbbf24]/20 text-[#fbbf24] border border-[#fbbf24]/40 uppercase">
+                  Admin Authorization Gate
+                </span>
+              </h4>
+              <p className="text-xs text-[#94a3b8] font-mono mt-0.5">
+                Notice to Hall Providers: Your movie will strictly only be shown to customers in the Customer Portal once authorized by the Platform Super Admin.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAdminNoticeModal(true)}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] hover:brightness-110 text-[#1e1300] font-bold text-xs font-mono tracking-wider shadow-[0_0_20px_rgba(251,191,36,0.3)] transition-all cursor-pointer whitespace-nowrap"
+          >
+            View Admin Notice
+          </button>
+        </div>
+
         {feedbackNotice && (
           <div className="p-3.5 rounded-xl bg-[#4edea3]/15 border border-[#4edea3]/40 text-xs font-mono text-[#4edea3] flex items-center justify-between gap-3 animate-in fade-in duration-200">
             <div className="flex items-center gap-2">
@@ -599,7 +735,7 @@ export default function ShowsPricingView({ currentUser }) {
         )}
 
         {loadError && <div role="alert" className="p-4 rounded-xl bg-[#f87171]/10 border border-[#f87171]/40 text-sm text-[#fca5a5]">{loadError}</div>}
-        {showForm && <AddShowForm myMovies={myMovies} cinemas={cinemas} onAdd={() => fetchData()} onClose={() => setShowForm(false)} />}
+        {showForm && <AddShowForm myMovies={myMovies} cinemas={cinemas} onAdd={() => { fetchData(); setShowAdminNoticeModal(true); }} onClose={() => setShowForm(false)} />}
         {demoForm && cinema && <DemoScreeningForm cinema={cinema} onCreated={async () => { setDemoForm(false); await fetchData(); }} onClose={() => setDemoForm(false)} />}
         {authorizationForm && cinema && <ExhibitionAuthorizationForm movies={providerMovies} cinema={cinema} screens={cinema.screens || []} onSubmitted={async () => { setAuthorizationForm(false); await fetchData(); }} onClose={() => setAuthorizationForm(false)} />}
 
@@ -898,7 +1034,26 @@ export default function ShowsPricingView({ currentUser }) {
             </div>
           </div>
         )}
+        </WorkflowLockedGate>
 
+        <PartnerStepFooter
+          currentStep={5}
+          onPrev={() => navigate('/partner/films')}
+          onNext={() => setShowAdminNoticeModal(true)}
+          prevLabel="← Back: Step 4 Film Catalog"
+          nextLabel="Complete 5-Step Path & View Admin Notice →"
+          helpText="All 5 steps completed? Click to view the mandatory Super Admin Authorization Notice."
+        />
+
+        {/* Theatrical Compliance & Admin Authorization Notice Modal */}
+        <AdminAuthorizationNoticeModal
+          isOpen={showAdminNoticeModal}
+          onClose={() => setShowAdminNoticeModal(false)}
+          onGoToCatalog={() => {
+            setShowAdminNoticeModal(false);
+            navigate('/partner/films');
+          }}
+        />
       </div>
     </div>
   );

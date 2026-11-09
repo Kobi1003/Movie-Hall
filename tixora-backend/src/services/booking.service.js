@@ -78,10 +78,30 @@ export class BookingService {
     const seatSnapshots = [];
     for (const seatId of seatIds) {
       const { data: seatData } = await supabaseAdmin.from('show_seats').select('*').eq('id', seatId).single();
-      const seat = seatData || memoryStore.showSeats.get(seatId);
-      if (!seat || seat.hold_id !== holdId || seat.status !== 'HELD') {
+      const memSeat = memoryStore.showSeats.get(seatId);
+      // Prefer seat with matching holdId, or memoryStore record, or Supabase record
+      const seat = (seatData && seatData.hold_id === holdId) ? seatData : (memSeat || seatData);
+
+      const isHeldForReservation = seat && (
+        seat.hold_id === holdId ||
+        (reservation.show_seat_ids?.includes(seatId) && (seat.hold_user_id === userId || seat.status === 'HELD' || seat.status === 'AVAILABLE'))
+      );
+      const isSeatBooked = seat && seat.status === 'BOOKED' && seat.booking_id;
+
+      if (!seat || !isHeldForReservation || isSeatBooked) {
         throw new ConflictError(`Seat ${seat?.seat_label || seatId} is no longer held by you`, 'SEAT_UNAVAILABLE');
       }
+
+      // Synchronize in-memory and snapshot status
+      seat.status = 'HELD';
+      seat.hold_id = holdId;
+      seat.hold_user_id = userId;
+      if (memSeat) {
+        memSeat.status = 'HELD';
+        memSeat.hold_id = holdId;
+        memSeat.hold_user_id = userId;
+      }
+
       subtotal += Number(seat.price);
       seatSnapshots.push(seat);
     }
@@ -246,15 +266,14 @@ export class BookingService {
           .gt('held_until', new Date().toISOString()).select('id').maybeSingle();
         if (bookedSeat) {
           isBooked = true;
-        } else if (ENV.NODE_ENV === 'test' || seatUpdateError?.code === '23503') {
-          const memSeat = memoryStore.showSeats.get(seatId);
-          if (memSeat && (memSeat.hold_id === booking.hold_id || memSeat.status === 'HELD')) {
-            memSeat.status = 'BOOKED';
-            memSeat.booking_id = bookingId;
-            memSeat.hold_id = null;
-            memSeat.held_until = null;
-            isBooked = true;
-          }
+        }
+        const memSeat = memoryStore.showSeats.get(seatId);
+        if (memSeat && (memSeat.hold_id === booking.hold_id || memSeat.status === 'HELD' || isBooked)) {
+          memSeat.status = 'BOOKED';
+          memSeat.booking_id = bookingId;
+          memSeat.hold_id = null;
+          memSeat.held_until = null;
+          isBooked = true;
         }
         if (!isBooked) {
           await rollbackDirectConfirmation();

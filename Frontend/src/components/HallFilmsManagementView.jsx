@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import PartnerWorkflowBar, { PartnerStepFooter, WorkflowLockedGate, PARTNER_STEPS } from './PartnerWorkflowBar';
+import { setPartnerUnlockedStep } from '../utils/workflow';
 import {
   Film,
   Plus,
@@ -24,6 +27,7 @@ import {
   AlertTriangle,
   Tv,
   Image as ImageIcon,
+  LayoutGrid,
   Calendar,
   Sparkles,
   Clapperboard,
@@ -109,7 +113,8 @@ const TABS = [
 ];
 
 // ── Tab 1: Film Catalog Dashboard ──────────────────────────────────────────────
-function FilmCatalog({ films, onSelectFilm, onAddFilm }) {
+function FilmCatalog({ films, onSelectFilm, onAddFilm, onPublishFilm }) {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
 
@@ -200,7 +205,7 @@ function FilmCatalog({ films, onSelectFilm, onAddFilm }) {
                 <StatusBadge status={film.status} sm />
               </div>
               <div className="absolute bottom-2 left-3 flex gap-1 flex-wrap">
-                {film.formats.slice(0, 3).map(f => (
+                {(Array.isArray(film.formats) ? film.formats : (typeof film.formats === 'string' ? [film.formats] : [])).slice(0, 3).map(f => (
                   <span key={f} className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-black/60 text-[#4cd7f6] border border-[#03b5d3]/30 uppercase">{f}</span>
                 ))}
               </div>
@@ -229,22 +234,44 @@ function FilmCatalog({ films, onSelectFilm, onAddFilm }) {
                 ))}
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-[#232938]">
-                <span className="text-[10px] font-mono text-[#4edea3] font-bold">{film.totalRevenue > 0 ? fmt(film.totalRevenue) : 'Pending Schedule'}</span>
-                <span className="text-xs text-[#64748b] group-hover:text-[#03b5d3] transition-colors flex items-center gap-1 font-mono">
-                  Manage <ChevronRight className="w-3.5 h-3.5" />
-                </span>
+              <div className="flex items-center justify-between pt-2 border-t border-[#232938] gap-2 flex-wrap">
+                <span className="text-[10px] font-mono text-[#4edea3] font-bold">{film.totalRevenue > 0 ? fmt(film.totalRevenue) : (film.status === 'ACTIVE' ? 'Active in Hall' : 'Awaiting Review / Draft')}</span>
+                <div className="flex items-center gap-2">
+                  {film.status === 'PENDING_REVIEW' && (
+                    <span className="text-[10px] font-mono text-[#fbbf24] px-2 py-0.5 rounded bg-[#fbbf24]/10 border border-[#fbbf24]/30 flex items-center gap-1" title="Under Super Admin compliance review">
+                      <Clock className="w-2.5 h-2.5 animate-pulse" /> Awaiting Admin Approval
+                    </span>
+                  )}
+                  {film.status === 'ACTIVE' && (
+                    <span className="text-[10px] font-mono text-[#4edea3] px-2 py-0.5 rounded bg-[#4edea3]/10 border border-[#4edea3]/30 flex items-center gap-1" title="Approved by Admin & live for customers">
+                      <CheckCircle2 className="w-2.5 h-2.5" /> Approved & Live
+                    </span>
+                  )}
+                  <span className="text-xs text-[#64748b] group-hover:text-[#03b5d3] transition-colors flex items-center gap-1 font-mono">
+                    Manage <ChevronRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      <PartnerStepFooter
+        currentStep={4}
+        onPrev={() => navigate('/partner/authorizations')}
+        onNext={() => navigate('/partner/shows')}
+        prevLabel="← Back: Step 3 Screen Authorization"
+        nextLabel="Proceed to Step 5: Shows & Pricing →"
+        helpText="Step 4: Film Catalog. Films approved by Super Admin can now be scheduled for live customer ticketing."
+      />
     </div>
   );
 }
 
 // ── Tab 2: Add / Edit Film Metadata ────────────────────────────────────────────
 function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
+  const navigate = useNavigate();
   const isEdit = !!selectedFilm;
   const [title, setTitle]           = useState(selectedFilm?.title || '');
   const [director, setDirector]     = useState(selectedFilm?.director || '');
@@ -265,20 +292,9 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
   const [isUploadingPoster, setIsUploadingPoster] = useState(false);
   const [saved, setSaved]           = useState(false);
   const [saveError, setSaveError]   = useState('');
-  const [screenWarning, setScreenWarning] = useState('');
-  const [screens, setScreens]       = useState([]);
-  const [selectedScreenId, setSelectedScreenId] = useState('');
-  const [seatRows, setSeatRows] = useState(['A', 'B', 'C', 'D', 'E'].map((name, idx) => ({
-    name,
-    seats: Array.from({ length: 10 }, (_, i) => ({ number: i + 1, active: true })),
-    tier: idx === 0 ? 'VIP' : idx === 1 ? 'Premium' : 'Standard'
-  })));
   const [isSaving, setIsSaving] = useState(false);
-  const [seatPrices, setSeatPrices] = useState({ Standard: 350, Premium: 450, VIP: 650 });
-  const [activeSeatTier, setActiveSeatTier] = useState('Standard');
-  const [certificateFiles, setCertificateFiles] = useState({ cbfc: null, distribution: null });
-  const [savedDocuments, setSavedDocuments] = useState([]);
-  const [documentsLoaded, setDocumentsLoaded] = useState(!selectedFilm?.id);
+  const [formats, setFormats] = useState(() => (Array.isArray(selectedFilm?.formats) ? selectedFilm.formats : ['Standard 2D']));
+  const safeFormats = Array.isArray(formats) ? formats : ['Standard 2D'];
 
   const SAMPLE_POSTERS = [
     { label: 'Sci-Fi Action', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=800&q=80' },
@@ -300,7 +316,7 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
       setSynopsis(selectedFilm.synopsis || '');
       setRelease(selectedFilm.releaseDate || '');
       setDefaultStartTime(selectedFilm.defaultStartTime?.slice(0, 5) || '19:00');
-      setFormats(selectedFilm.formats?.length ? selectedFilm.formats : ['Standard 2D']);
+      setFormats(Array.isArray(selectedFilm.formats) ? selectedFilm.formats : ['Standard 2D']);
       const currentPoster = selectedFilm.posterUrl || selectedFilm.poster_path || selectedFilm.poster || '';
       setPosterUrl(currentPoster);
       setPosterPreview(currentPoster);
@@ -324,31 +340,16 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
     }
   }, [selectedFilm]);
 
-  useEffect(() => {
-    let cancelled = false;
-    cinemasApi.screens().then(data => {
-      if (cancelled || !Array.isArray(data)) return;
-      setScreens(data.filter(screen => screen.is_active));
-      if (!selectedScreenId && data[0]?.id) setSelectedScreenId(data[0].id);
-    }).catch(err => {
-      if (!cancelled) setScreenWarning(`No cinema screen is linked yet. The film can still be published; add a cinema hall before scheduling shows.`);
-    });
-    return () => { cancelled = true; };
-  }, []);
 
-  useEffect(() => {
-    if (!selectedFilm?.id) return;
-    let cancelled = false;
-    moviesApi.getDocuments(selectedFilm.id)
-      .then(docs => { if (!cancelled) setSavedDocuments(Array.isArray(docs) ? docs : []); })
-      .catch(err => { if (!cancelled) setSaveError(`Could not load saved certificates: ${err.message}`); })
-      .finally(() => { if (!cancelled) setDocumentsLoaded(true); });
-    return () => { cancelled = true; };
-  }, [selectedFilm?.id]);
+
+
 
   const FORMAT_OPTIONS = ['IMAX 3D', 'IMAX 2D', 'IMAX 70mm', 'Dolby Atmos', '4DX', 'ScreenX', 'HFR 48fps', 'Standard 2D', 'Live Satellite 4K'];
 
-  const toggleFormat = (f) => setFormats(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+  const toggleFormat = (f) => setFormats(prev => {
+    const list = Array.isArray(prev) ? prev : ['Standard 2D'];
+    return list.includes(f) ? list.filter(x => x !== f) : [...list, f];
+  });
 
   const handlePosterFileChange = (file) => {
     if (!file) return;
@@ -369,22 +370,6 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
   const handleSave = async (e, isDraft = false) => {
     if (e) e.preventDefault();
     setSaveError('');
-    if (!documentsLoaded) {
-      setSaveError('Please wait while the saved certificates load.');
-      return;
-    }
-    const certificateRequirements = [
-      { type: 'CBFC_CERTIFICATE', fileKey: 'cbfc', label: 'CBFC certificate' },
-      { type: 'DISTRIBUTION_DEED', fileKey: 'distribution', label: 'distribution authorization certificate' },
-    ];
-    const missingCertificate = certificateRequirements.find(({ type, fileKey }) =>
-      !certificateFiles[fileKey] && !savedDocuments.some(doc => doc.document_type === type)
-    );
-    if (!isDraft && missingCertificate) {
-      setSaveError(`Upload the ${missingCertificate.label} before submitting for admin review. Or click 'Save as Draft' to save with the poster first.`);
-      return;
-    }
-
     setIsSaving(true);
     let finalPoster = posterUrl || posterPreview;
     if (posterFile) {
@@ -423,12 +408,12 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
       defaultStartTime: defaultStartTime || null,
       synopsis,
       formats: formats.length ? formats : ['Standard 2D'],
-      status: isDraft ? 'DRAFT' : (selectedFilm?.status || 'PENDING_REVIEW'),
+      status: isDraft ? 'DRAFT' : (selectedFilm?.status === 'ACTIVE' ? 'ACTIVE' : 'PENDING_REVIEW'), isDraft,
       posterUrl: finalPoster,
       posterPath: finalPoster,
       poster: finalPoster,
       assignedHalls: selectedFilm?.assignedHalls || 0,
-      totalScreens: selectedFilm?.totalScreens || screens.length,
+      totalScreens: selectedFilm?.totalScreens || 0,
       weeklyOccupancy: selectedFilm?.weeklyOccupancy || 0,
       totalRevenue: selectedFilm?.totalRevenue || 0,
     };
@@ -436,66 +421,11 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
     try {
       const storedFilm = await onSaveFilm(filmData);
       if (!storedFilm?.id) throw new Error('Film could not be saved to Supabase.');
-      for (const { type, fileKey } of certificateRequirements) {
-        const file = certificateFiles[fileKey];
-        if (!file) continue;
-        const uploaded = await moviesApi.uploadDocument(storedFilm.id, file, type);
-        setSavedDocuments(prev => [uploaded, ...prev.filter(doc => doc.document_type !== type)]);
-        setCertificateFiles(prev => ({ ...prev, [fileKey]: null }));
-      }
-      if (selectedScreenId) {
-        const selectedScreen = screens.find(s => s.id === selectedScreenId);
-        try {
-          const layoutData = {
-            name: `${title} Auditorium Layout`, canvasWidth: 1000, canvasHeight: Math.max(600, seatRows.length * 60 + 160),
-            screenPosition: 'TOP',
-            sections: [{ name: 'Main Hall', displayName: 'Main Auditorium', sortOrder: 0 }],
-            categories: Object.entries(seatPrices).map(([name, basePrice]) => ({
-              name, displayName: name, basePrice, seatType: name === 'Standard' ? 'STANDARD' : name.toUpperCase()
-            })),
-            seats: seatRows.flatMap((row, rowIndex) => row.seats.filter(seat => seat.active).map(seat => ({
-              rowLabel: row.name, seatNumber: seat.number, categoryName: row.tier,
-              sectionName: 'Main Hall', seatType: row.tier === 'Standard' ? 'STANDARD' : row.tier.toUpperCase(),
-              xPosition: 60 + (seat.number - 1) * 48, yPosition: 120 + rowIndex * 60,
-              width: 32, height: 32
-            })))
-          };
-          const result = await seatPlansApi.save(selectedScreenId, layoutData);
-          if (!result?.version?.id) throw new Error('Seat plan was not saved.');
-          await seatPlansApi.publish(selectedScreenId, result.version.id);
 
-          // Schedule screening so tickets are immediately bookable on this date and time
-          if (selectedScreen?.cinema_id) {
-            try {
-              const todayStr = new Date().toISOString().slice(0, 10);
-              const showDate = (!releaseDate || releaseDate < todayStr) ? todayStr : releaseDate;
-              const startTime = (defaultStartTime || '19:00').slice(0, 5) + ':00';
-              await showsApi.create({
-                movieId: storedFilm.id,
-                cinemaId: selectedScreen.cinema_id,
-                screenId: selectedScreenId,
-                showDate,
-                startTime,
-                endTime: '22:00:00',
-                language: lang || 'Hindi',
-                format: formats[0] || 'Standard 2D',
-                priceTiers: Object.entries(seatPrices).map(([name, price]) => ({
-                  tierName: name,
-                  price: Number(price)
-                }))
-              });
-            } catch (showErr) {
-              console.warn('Auto show scheduling note:', showErr.message);
-              setScreenWarning(`Screening scheduling notice: ${showErr.message}`);
-            }
-          }
-        } catch (error) {
-          setScreenWarning(`The film was saved, but the auditorium seat plan could not be updated: ${error.message}`);
-        }
-      }
+
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-      if (!isEdit) onPublish?.(storedFilm);
+      onPublish?.(storedFilm, isDraft);
     } catch (err) {
       setSaveError(err.message || 'Could not save the film and its certificates.');
     } finally {
@@ -855,93 +785,27 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
                 key={f}
                 onClick={() => toggleFormat(f)}
                 className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                  formats.includes(f)
+                  safeFormats.includes(f)
                     ? 'bg-[#03b5d3]/20 text-[#4cd7f6] border-[#03b5d3]/60'
                     : 'bg-[#0d0e12] text-[#64748b] border-[#232938] hover:border-[#03b5d3]/40'
                 }`}
               >
-                {formats.includes(f) && '✓ '}{f}
+                {safeFormats.includes(f) && '✓ '}{f}
               </button>
             ))}
           </div>
         </div>
 
-        {screens.length > 0 && <div className="md:col-span-2 p-4 rounded-2xl bg-[#12151e] border border-[#232938] flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-[#94a3b8] font-bold">Auditorium Seat Planner</label>
-          <span className="text-[10px] text-[#64748b]">Configure rows and seat tiers for a real screen. Click seats to include or remove them; the layout is saved to Supabase.</span>
-          </div>
-          <select value={selectedScreenId} onChange={e => setSelectedScreenId(e.target.value)}
-            className="bg-[#0d0e12] border border-[#232938] rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-[#03b5d3]">
-            <option value="">Select an auditorium screen</option>
-            {screens.map(screen => <option key={screen.id} value={screen.id}>{screen.screen_name} · {screen.capacity || 0} seats</option>)}
-          </select>
-          <div className="flex flex-wrap gap-2">
-            {Object.keys(seatPrices).map(tier => (
-              <button type="button" key={tier} onClick={() => setActiveSeatTier(tier)}
-                className={`px-3 py-1.5 rounded-lg border text-[10px] font-mono ${activeSeatTier === tier ? 'bg-[#03b5d3]/20 text-[#4cd7f6] border-[#03b5d3]/60' : 'text-[#94a3b8] border-[#232938]'}`}>
-                {tier} · ₹{seatPrices[tier]}
-              </button>
-            ))}
-            <label className="flex items-center gap-2 text-[10px] font-mono text-[#94a3b8]">Tier price
-              <input type="number" min="1" value={seatPrices[activeSeatTier]} onChange={e => setSeatPrices(prev => ({ ...prev, [activeSeatTier]: Number(e.target.value) }))}
-                className="w-24 bg-[#0d0e12] border border-[#232938] rounded-lg px-2 py-1.5 text-white" />
-            </label>
-          </div>
-          <div className="flex flex-col gap-2">
-            {seatRows.map((row, rowIndex) => (
-              <div key={row.name} className="flex flex-wrap items-center gap-2">
-                <span className="w-7 text-[10px] font-mono font-bold text-[#64748b]">{row.name}</span>
-                <select value={row.tier} onChange={e => setSeatRows(prev => prev.map((item, index) => index === rowIndex ? { ...item, tier: e.target.value } : item))}
-                  className="bg-[#0d0e12] border border-[#232938] rounded-lg px-2 py-1.5 text-[10px] text-white">
-                  {Object.keys(seatPrices).map(tier => <option key={tier} value={tier}>{tier}</option>)}
-                </select>
-                <div className="flex flex-wrap gap-1">
-                  {row.seats.map(seat => (
-                    <button type="button" key={seat.number} title={`${row.name}${seat.number} · ${row.tier} · ${seat.active ? 'included' : 'removed'}`} onClick={() => setSeatRows(prev => prev.map((item, index) => index === rowIndex ? { ...item, seats: item.seats.map(existing => existing.number === seat.number ? { ...existing, active: !existing.active } : existing) } : item))}
-                      className={`w-6 h-6 rounded-t-md border text-[8px] ${seat.active ? 'bg-[#232938] border-[#4cd7f6]/40 text-[#4cd7f6]' : 'bg-[#0d0e12] border-[#64748b]/30 text-[#64748b] line-through'}`} aria-label={`${row.name}${seat.number}`} aria-pressed={seat.active}>
-                      {seat.number}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <button type="button" disabled={seatRows.length >= 26} onClick={() => setSeatRows(prev => [...prev, { name: String.fromCharCode(65 + prev.length), seats: Array.from({ length: 10 }, (_, i) => ({ number: i + 1, active: true })), tier: activeSeatTier }])}
-              className="self-start px-3 py-1.5 rounded-lg border border-[#232938] text-[10px] text-[#94a3b8] hover:border-[#03b5d3]/50">+ Add row</button>
-          </div>
-        </div>}
-
-        {/* Required private film certificates */}
-        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-2xl bg-[#12151e] border border-[#232938]">
-          {[
-            { key: 'cbfc', type: 'CBFC_CERTIFICATE', label: 'CBFC Certificate' },
-            { key: 'distribution', type: 'DISTRIBUTION_DEED', label: 'Distribution Authorization Certificate' },
-          ].map(doc => {
-            const existing = savedDocuments.find(item => item.document_type === doc.type);
-            return <div key={doc.key} className="flex flex-col gap-2">
-              <label htmlFor={`film-document-${doc.key}`} className="text-xs text-[#94a3b8] font-bold">{doc.label} *</label>
-              <input
-                id={`film-document-${doc.key}`}
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,application/pdf,image/png,image/jpeg,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                onChange={event => setCertificateFiles(prev => ({ ...prev, [doc.key]: event.target.files?.[0] || null }))}
-                className="w-full text-[11px] text-[#94a3b8] file:mr-3 file:rounded-lg file:border-0 file:bg-[#03b5d3]/15 file:px-3 file:py-2 file:text-[#4cd7f6] hover:file:bg-[#03b5d3]/25"
-              />
-              <span className="text-[10px] text-[#64748b]">PDF, JPG, PNG, DOC or DOCX · max 10 MB</span>
-              {existing && <span className="text-[10px] text-[#4edea3]">Saved: {existing.filename} · {existing.status.replaceAll('_', ' ')}</span>}
-            </div>;
-          })}
-        </div>
       </div>
 
-      {screenWarning && <div className="p-3 rounded-xl bg-[#fbbf24]/10 border border-[#fbbf24]/30 text-[#fcd34d] text-xs font-mono">{screenWarning}</div>}
-      {saveError && <div role="alert" className="p-3 rounded-xl bg-[#ffb4ab]/10 border border-[#ffb4ab]/30 text-[#ffb4ab] text-xs font-mono">{saveError}</div>}
+            {saveError && <div role="alert" className="p-3 rounded-xl bg-[#ffb4ab]/10 border border-[#ffb4ab]/30 text-[#ffb4ab] text-xs font-mono">{saveError}</div>}
 
       <div className="flex flex-col gap-2 pt-2">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button type="submit" disabled={isSaving}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#03b5d3] to-[#0ea5e9] text-[#001f26] font-bold text-xs font-mono shadow-[0_0_20px_rgba(3,181,211,0.35)] hover:brightness-110 transition-all cursor-pointer disabled:opacity-50">
-            {isSaving ? (isUploadingPoster ? 'Uploading Poster Art…' : 'Submitting Film…') : isEdit ? 'Save Changes to Film Catalog' : 'Submit Film for Admin Approval'}
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#03b5d3] to-[#0ea5e9] text-[#001f26] font-bold text-xs font-mono shadow-[0_0_20px_rgba(3,181,211,0.35)] hover:brightness-110 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-[#001f26]" />
+            {isSaving ? (isUploadingPoster ? 'Uploading Poster Art…' : 'Submitting to Admin…') : isEdit ? 'Submit Changes for Admin Approval' : 'Submit Film for Admin Approval & Publishing'}
           </button>
           <button type="button" disabled={isSaving}
             onClick={(e) => handleSave(e, true)}
@@ -950,10 +814,35 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
           </button>
         </div>
         <span className="text-[11px] text-[#94a3b8] font-mono flex items-center gap-1.5">
-          <ShieldCheck className="w-3.5 h-3.5 text-[#4cd7f6]" />
-          Films are submitted for platform administrator review and will only appear on the customer booking portal once approved by an admin.
+          <Clock className="w-3.5 h-3.5 text-[#fbbf24]" />
+          Statutory compliance policy: Films will only get published and shown in the customer portal once approved by the Super Admin.
         </span>
       </div>
+
+      {/* Guided Next Action: Seat Layout Studio */}
+      <div className="p-4 rounded-xl bg-[#181c26] border border-[#f43f5e]/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-2.5">
+          <Sparkles className="w-4 h-4 text-[#f43f5e] shrink-0" />
+          <span className="text-xs font-mono text-[#cbc3d7]">
+            Section 1 Complete: Next, design your auditorium seating matrix and tier pricing in Step 2: Seat Layout Studio.
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/partner/seat-planner')}
+          className="shrink-0 px-4 py-2 rounded-xl bg-gradient-to-r from-[#f43f5e] to-[#e11d48] text-white font-mono font-bold text-xs flex items-center gap-1.5 hover:brightness-110 shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all cursor-pointer"
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+          <span>Step 2: Seat Layout Studio →</span>
+        </button>
+      </div>
+
+      <PartnerStepFooter
+        currentStep={1}
+        onNext={() => navigate('/partner/seat-planner')}
+        nextLabel="Proceed to Step 2: Seat Layout Studio →"
+        helpText="Film details and certificates saved. Proceed to Step 2 to configure auditorium seating and tier pricing."
+      />
     </form>
   );
 }
@@ -961,6 +850,7 @@ function AddFilmTab({ selectedFilm, onSaveFilm, onPublish }) {
 // ── Verification Window ────────────────────────────────────────────────────────
 // ── Tab 3: Cinema Screen Authorization ──────────────────────────────────────────
 function CinemaAuthorizationTab({ currentUser, onShowVerification }) {
+  const navigate = useNavigate();
   const [cinema, setCinema] = useState(null);
   const [screens, setScreens] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -1032,7 +922,11 @@ function CinemaAuthorizationTab({ currentUser, onShowVerification }) {
   };
   const saveScreen = async e => { e.preventDefault(); setBusy(true); setError(''); const payload = { ...screen, screenNumber: Number(screen.screenNumber), capacity: Number(screen.capacity) }; try { if (editingId) await cinemasApi.updateScreen(editingId, payload); else await cinemasApi.createScreen(payload); setMessage(editingId ? 'Screen updated.' : 'Screen added.'); setEditingId(null); setScreen({ screenName: '', screenNumber: screens.length + 2, screenType: 'STANDARD', capacity: 100, projectionType: 'Laser 4K', audioFormat: 'Dolby Atmos', supportedFormats: ['2D'], isActive: true }); await load(); } catch (x) { setError(x.message); } finally { setBusy(false); } };
   const upload = async (type, file) => { if (!file) return; setUploadingType(type); setError(''); try { await cinemasApi.uploadDocument(file, type); setMessage(`${file.name} securely uploaded for administrator review.`); await load(); } catch (x) { setError(x.message); } finally { setUploadingType(''); } };
-  const docs = [{ type: 'FIRE_SAFETY', label: 'Fire Safety NOC' }, { type: 'CINEMA_LICENCE', label: 'CBFC Exhibitor Licence' }];
+  const docs = [
+    { type: 'CINEMA_LICENCE', label: 'CBFC Exhibitor Licence / Certificate' },
+    { type: 'DISTRIBUTION_DEED', label: 'Theatrical Distribution Authorization Deed' },
+    { type: 'FIRE_SAFETY', label: 'Fire Safety NOC & Premises Licence' }
+  ];
   const isAuthorized = cinema?.verification_status === 'VERIFIED';
   const isSubmitted = cinema?.verification_status === 'SUBMITTED' || cinema?.verification_status === 'UNDER_REVIEW' || isAuthorized;
 
@@ -1130,67 +1024,133 @@ function CinemaAuthorizationTab({ currentUser, onShowVerification }) {
       </button>
     </form>
     {cinema && <>
-      <section className="p-5 rounded-2xl bg-[#12151e] border border-[#232938] space-y-3">
-        <h3 className="text-sm font-bold text-white">Required documents</h3>
-        <p className="text-xs text-[#64748b]">PDF, JPG, PNG, DOC or DOCX · max 10 MB · private Supabase storage</p>
-        {docs.map(d => {
-          const saved = documents.find(x => x.document_type === d.type);
-          return (
-            <div key={d.type} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[#232938]">
-              <div>
-                <p className="text-sm text-white">{d.label}</p>
-                <p className="text-[10px] text-[#94a3b8]">{saved ? `${saved.original_filename} · ${saved.status}` : 'Not uploaded'}</p>
-              </div>
-              <label className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
-                isSubmitted
-                  ? 'bg-[#232938] text-[#94a3b8] border border-[#2e3444] cursor-not-allowed'
-                  : 'bg-[#03b5d3]/15 text-[#4cd7f6] cursor-pointer hover:brightness-110'
+      <section className="p-5 rounded-2xl bg-[#12151e] border border-[#232938] space-y-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#fbbf24]/15 text-[#fbbf24] border border-[#fbbf24]/30 uppercase font-bold">
+              Mandatory Statutory Licences
+            </span>
+            <span className="text-xs text-[#94a3b8] font-mono">• 3 Documents Required</span>
+          </div>
+          <h3 className="text-base font-extrabold text-white mt-1.5">Cinema Screen & Exhibition Authorizations</h3>
+          <p className="text-xs text-[#64748b]">Upload your official statutory licences for Super Admin verification. Movies can only be published to customers once these documents are approved.</p>
+        </div>
+
+        <div className="grid gap-3">
+          {docs.map((d, index) => {
+            const saved = documents.find(x => x.document_type === d.type);
+            const isVerified = saved?.status === 'VERIFIED';
+            return (
+              <div key={d.type} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border transition-all ${
+                saved ? 'bg-[#181c26]/60 border-[#4edea3]/30' : 'bg-[#0d0e12] border-[#232938]'
               }`}>
-                {uploadingType === d.type ? 'Uploading…' : isSubmitted ? 'Submitted' : saved ? 'Replace' : 'Choose & upload'}
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  disabled={!!uploadingType || isSubmitted}
-                  onChange={e => { upload(d.type, e.target.files?.[0]); e.target.value = ''; }}
-                />
-              </label>
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                    isVerified ? 'bg-[#4edea3]/20 text-[#4edea3]' : saved ? 'bg-[#03b5d3]/20 text-[#4cd7f6]' : 'bg-[#232938] text-[#94a3b8]'
+                  }`}>
+                    {saved ? '✓' : index + 1}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">{d.label}</p>
+                    <p className="text-xs text-[#94a3b8] mt-0.5">{d.desc || 'Statutory regulatory document'}</p>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      {saved ? (
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
+                          isVerified ? 'bg-[#4edea3]/15 text-[#4edea3] border-[#4edea3]/40' : 'bg-[#03b5d3]/15 text-[#4cd7f6] border-[#03b5d3]/40'
+                        }`}>
+                          {isVerified ? '✓ Verified by Admin' : `✓ Stored: ${saved.original_filename || 'document.pdf'}`}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#ffb4ab]/15 text-[#ffb4ab] border border-[#ffb4ab]/30">
+                          Pending Upload
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <label className={`px-4 py-2.5 rounded-xl text-xs font-mono font-bold transition-all shrink-0 text-center flex items-center justify-center gap-1.5 ${
+                  isAuthorized
+                    ? 'bg-[#4edea3]/15 text-[#4edea3] border border-[#4edea3]/40 cursor-not-allowed'
+                    : saved
+                    ? 'bg-[#1a1d26] hover:bg-[#252a38] text-[#4cd7f6] border border-[#03b5d3]/40 cursor-pointer shadow-sm'
+                    : 'bg-gradient-to-r from-[#03b5d3] to-[#0ea5e9] text-[#001f26] hover:brightness-110 cursor-pointer shadow-[0_0_15px_rgba(3,181,211,0.3)]'
+                }`}>
+                  {uploadingType === d.type ? 'Uploading…' : isAuthorized ? 'Verified by Admin' : saved ? 'Replace Document' : 'Choose & Upload'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    disabled={!!uploadingType || isAuthorized}
+                    onChange={e => { upload(d.type, e.target.files?.[0]); e.target.value = ''; }}
+                  />
+                </label>
+              </div>
+            );
+          })}
+        </div>
+
+        {(() => {
+          const allDocsUploaded = docs.every(d => documents.some(x => x.document_type === d.type));
+          return (
+            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-[#232938]">
+              <span className="text-xs text-[#94a3b8] font-mono">
+                {isAuthorized
+                  ? 'All documents officially verified. Screenings are published to customers.'
+                  : allDocsUploaded
+                  ? 'All 3 documents uploaded! Ready to submit for Platform Super Admin authorization.'
+                  : 'Please upload all 3 documents to enable Super Admin verification.'}
+              </span>
+              <button
+                type="button"
+                disabled={busy || !allDocsUploaded || isAuthorized}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await cinemasApi.submitVerification();
+                    setPartnerUnlockedStep(4);
+                    setMessage('Cinema hall and screens successfully submitted for Platform Super Admin verification.');
+                    if (onShowVerification) {
+                      onShowVerification({
+                        title: "Cinema Verification Submitted",
+                        message: "Your movie-hall is under verification... it will be approved if properly verified"
+                      });
+                    }
+                    await load();
+                  } catch (e) {
+                    setError(e.message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className={`px-6 py-3 rounded-xl text-xs font-bold font-mono transition-all ${
+                  isAuthorized
+                    ? 'bg-[#4edea3]/20 text-[#4edea3] border border-[#4edea3]/40 cursor-not-allowed'
+                    : isSubmitted
+                    ? 'bg-[#fbbf24]/20 text-[#fbbf24] border border-[#fbbf24]/50 cursor-pointer hover:bg-[#fbbf24]/30'
+                    : allDocsUploaded
+                    ? 'bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] text-[#201400] shadow-[0_0_20px_rgba(251,191,36,0.35)] cursor-pointer hover:brightness-110'
+                    : 'bg-[#181c26] text-[#64748b] border border-[#232938] cursor-not-allowed opacity-60'
+                }`}
+              >
+                {isAuthorized ? '✓ Verified & Authorized by Super Admin' : isSubmitted ? '⏳ Under Verification (Re-submit)' : 'Submit All Documents for Super Admin Review'}
+              </button>
             </div>
           );
-        })}
-        <button
-          type="button"
-          disabled={busy || isSubmitted || docs.some(d => !documents.some(x => x.document_type === d.type))}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              await cinemasApi.submitVerification();
-              setMessage('Submitted for administrator review.');
-              if (onShowVerification) {
-                onShowVerification({
-                  title: "Cinema Verification Submitted",
-                  message: "Your movie-hall is under verification... it will be approved if properly verified"
-                });
-              }
-              await load();
-            } catch (e) {
-              setError(e.message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-            isSubmitted
-              ? 'bg-[#4edea3]/20 text-[#4edea3] border border-[#4edea3]/40 cursor-not-allowed opacity-90'
-              : 'bg-[#fbbf24] text-[#201400] disabled:opacity-40 cursor-pointer hover:brightness-110'
-          }`}
-        >
-          {isSubmitted ? 'Submitted' : 'Submit for admin review'}
-        </button>
+        })()}
       </section>
       <section className="p-5 rounded-2xl bg-[#12151e] border border-[#232938] space-y-4"><div><h3 className="text-sm font-bold text-white">Auditorium screens ({screens.filter(s=>s.is_active).length} active of {screens.length})</h3><p className="text-xs text-[#64748b] mt-1">Add screens, edit their type and seating capacity, or deactivate a screen.</p></div>{screens.map(s=><div key={s.id} className="flex items-center justify-between gap-3 p-4 rounded-xl bg-[#0d0e12] border border-[#232938]"><div><p className="text-sm font-bold text-white">Screen {s.screen_number}: {s.screen_name}</p><p className="text-xs text-[#94a3b8]">{s.screen_type} · {s.capacity} seats · {s.projection_type} · {s.audio_format} · {s.is_active?'Active':'Inactive'}</p></div><button type="button" onClick={()=>{setEditingId(s.id);setScreen({screenName:s.screen_name,screenNumber:s.screen_number,screenType:s.screen_type,capacity:s.capacity,projectionType:s.projection_type||'',audioFormat:s.audio_format||'',supportedFormats:s.supported_formats||[],isActive:s.is_active});}} className="px-3 py-2 rounded-lg border border-[#03b5d3]/40 text-[#4cd7f6] text-xs">Edit</button></div>)}
       <form onSubmit={saveScreen} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 border-t border-[#232938] pt-4">{[['screenName','Screen name','text'],['screenNumber','Screen number','number'],['screenType','Screen type','text'],['capacity','Number of seats','number'],['projectionType','Projection type','text'],['audioFormat','Audio format','text']].map(([key,label,type])=><label key={key} className="space-y-1 text-xs text-[#94a3b8]">{label}<input required type={type} min={type==='number'?1:undefined} className={input} value={screen[key]} onChange={e=>setScreen(p=>({...p,[key]:e.target.value}))}/></label>)}<label className="space-y-1 text-xs text-[#94a3b8]">Supported formats<input className={input} value={(screen.supportedFormats||[]).join(', ')} onChange={e=>setScreen(p=>({...p,supportedFormats:e.target.value.split(',').map(x=>x.trim()).filter(Boolean)}))}/></label><label className="flex items-center gap-2 text-xs text-[#94a3b8]"><input type="checkbox" checked={screen.isActive!==false} onChange={e=>setScreen(p=>({...p,isActive:e.target.checked}))}/> Screen available for scheduling</label><div className="flex items-end gap-2"><button disabled={busy} className="px-4 py-2 rounded-lg bg-[#03b5d3] text-[#001f26] text-xs font-bold">{busy?'Saving…':editingId?'Save changes':'Add screen'}</button>{editingId&&<button type="button" onClick={()=>setEditingId(null)} className="px-3 py-2 rounded-lg border border-[#232938] text-xs text-[#94a3b8]">Cancel</button>}</div></form></section>
     </>}
+
+    <PartnerStepFooter
+      currentStep={3}
+      onPrev={() => navigate('/partner/seat-planner')}
+      onNext={() => navigate('/partner/films')}
+      prevLabel="← Back: Step 2 Seat Studio"
+      nextLabel="Proceed to Step 4: Film Catalog →"
+      helpText="Step 3: Screen Authorization. Screens and documents saved. Proceed to Step 4 to review your film submissions."
+    />
   </div>;
 }
 
@@ -1202,6 +1162,7 @@ const TAB_TO_VIEW = {
 };
 
 export default function HallFilmsManagementView({ currentUser, initialTab = 'catalog', onTabChange }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [syncedTab, setSyncedTab] = useState(initialTab);
   const [selectedFilm, setSelectedFilm] = useState(null);
@@ -1271,6 +1232,7 @@ export default function HallFilmsManagementView({ currentUser, initialTab = 'cat
     };
     setSelectedFilm(normalized);
     setFilms(prev => [normalized, ...prev.filter(f => f.id !== filmData.id && f.id !== saved.id)]);
+    setPartnerUnlockedStep(2);
     return normalized;
   };
 
@@ -1324,26 +1286,19 @@ export default function HallFilmsManagementView({ currentUser, initialTab = 'cat
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-1 bg-[#12151e] border border-[#232938] rounded-2xl p-1.5 overflow-x-auto">
-          {TABS.map(tab => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => selectTab(tab.id)}
-                className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'bg-gradient-to-r from-[#03b5d3] to-[#0ea5e9] text-[#001f26] font-bold shadow-[0_0_16px_rgba(3,181,211,0.35)]'
-                    : 'text-[#94a3b8] hover:text-white hover:bg-[#1a1b20]'
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* 5-Step Pipeline Navigation Header */}
+        <PartnerWorkflowBar
+          currentStep={activeTab === 'add-film' ? 1 : activeTab === 'authorization' ? 3 : 4}
+          onStepClick={(step) => {
+            if (step.step === 2) {
+              navigate('/partner/seat-planner');
+            } else if (step.step === 5) {
+              navigate('/partner/shows');
+            } else {
+              selectTab(step.tabId);
+            }
+          }}
+        />
 
         {catalogFeedback && activeTab === 'catalog' && <div role="status" className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[#4edea3]/15 border border-[#4edea3]/40 text-[#4edea3] text-sm">
           <span><CheckCircle2 className="inline w-4 h-4 mr-2" />{catalogFeedback}</span>
@@ -1353,28 +1308,40 @@ export default function HallFilmsManagementView({ currentUser, initialTab = 'cat
         {/* Tab Content */}
         <div>
           {activeTab === 'catalog' && (
-            <FilmCatalog films={films} onSelectFilm={handleSelectFilm} onAddFilm={handleAddFilm} />
+            <WorkflowLockedGate stepNumber={4}>
+              <FilmCatalog
+                films={films}
+                onSelectFilm={handleSelectFilm}
+                onAddFilm={handleAddFilm}
+              />
+            </WorkflowLockedGate>
           )}
           {activeTab === 'add-film' && (
             <AddFilmTab
               selectedFilm={selectedFilm}
               onSaveFilm={handleSaveFilm}
-              onPublish={(film) => {
-                showVerificationModal({
-                  title: "Film Registration Submitted",
-                  message: "Your movie-hall is under verification... it will be approved if properly verified"
-                });
-                setCatalogFeedback(`${film.title} was submitted and is now in your Film Catalog as awaiting administrator approval.`);
+              onPublish={(film, isDraft) => {
+                if (isDraft) {
+                  setCatalogFeedback(`"${film.title}" has been saved as Draft.`);
+                } else {
+                  showVerificationModal({
+                    title: "Film Submitted for Super Admin Approval",
+                    message: "Your movie and mandatory statutory certificates (CBFC & Distribution Deed) are under review. It will only be published to the customer portal once approved by the Super Admin."
+                  });
+                  setCatalogFeedback(`⏳ "${film.title}" has been submitted for Super Admin review. It will appear on the customer portal once approved.`);
+                }
                 selectTab('catalog');
               }}
             />
           )}
           {activeTab === 'authorization' && (
-            <CinemaAuthorizationTab
-              films={films}
-              currentUser={currentUser}
-              onShowVerification={showVerificationModal}
-            />
+            <WorkflowLockedGate stepNumber={3}>
+              <CinemaAuthorizationTab
+                films={films}
+                currentUser={currentUser}
+                onShowVerification={showVerificationModal}
+              />
+            </WorkflowLockedGate>
           )}
         </div>
 

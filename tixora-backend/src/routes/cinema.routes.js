@@ -30,41 +30,32 @@ router.get('/cinema/shows', authenticateUser, requireExhibitor(), async (req, re
   try {
     const { date } = req.query;
     let shows = [];
-    if (req.user.role === 'CINEMA_OWNER') {
-      try {
-        const cinema = await CinemaService.getMyCinema(req.user.id);
-        shows = await ShowService.getPublicShows({ cinemaId: cinema.id, date });
-      } catch (_) {
-        shows = [];
+    let cinema = null;
+    try {
+      cinema = await CinemaService.getOrCreateMyCinema(req.user.id);
+      if (cinema?.id) {
+        shows = await ShowService.getPublicShows({ cinemaId: cinema.id, date, isProvider: true });
       }
-      // If user is also a movie provider or has registered movies, merge those shows
-      try {
-        const myMovies = await MovieService.getProviderMovies(req.user.id, req.user.role);
-        const movieIds = (myMovies || []).map(m => m.id);
-        if (movieIds.length > 0) {
-          const allShows = await Promise.all(
-            movieIds.map(id => ShowService.getPublicShows({ movieId: id, date }).catch(() => []))
-          );
-          const existingIds = new Set(shows.map(s => s.id));
-          for (const s of allShows.flat()) {
-            if (!existingIds.has(s.id)) {
-              shows.push(s);
-              existingIds.add(s.id);
-            }
-          }
-        }
-      } catch (_) {}
-    } else {
-      // Movie providers see shows for their movies
+    } catch (_) {
+      shows = [];
+    }
+
+    try {
       const myMovies = await MovieService.getProviderMovies(req.user.id, req.user.role);
       const movieIds = (myMovies || []).map(m => m.id);
-      if (movieIds.length === 0) { return ApiResponse.success(res, []); }
-      // Fetch shows for all provider movies
-      const allShows = await Promise.all(
-        movieIds.map(id => ShowService.getPublicShows({ movieId: id, date }).catch(() => []))
-      );
-      shows = allShows.flat();
-    }
+      if (movieIds.length > 0 && cinema?.id) {
+        const allShows = await Promise.all(
+          movieIds.map(id => ShowService.getPublicShows({ movieId: id, cinemaId: cinema.id, date, isProvider: true }).catch(() => []))
+        );
+        const existingIds = new Set(shows.map(s => s.id));
+        for (const s of allShows.flat()) {
+          if (!existingIds.has(s.id)) {
+            shows.push(s);
+            existingIds.add(s.id);
+          }
+        }
+      }
+    } catch (_) {}
     shows = await ShowService.attachPerformanceMetrics(shows);
     return ApiResponse.success(res, shows);
   } catch (err) {
@@ -94,6 +85,15 @@ router.patch('/cinema/movies/:movieId', authenticateUser, requireExhibitor(), va
   try {
     const movie = await MovieService.updateMovie(req.user.id, req.params.movieId, req.body);
     return ApiResponse.success(res, movie, 'Movie updated successfully');
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/cinema/movies/:movieId/publish', authenticateUser, requireExhibitor(), async (req, res, next) => {
+  try {
+    const movie = await MovieService.publishMovie(req.user.id, req.params.movieId);
+    return ApiResponse.success(res, movie, 'Movie published successfully and active for hall screenings');
   } catch (err) {
     next(err);
   }
@@ -163,7 +163,7 @@ router.post('/cinema', authenticateUser, requireCinemaManager(), validateRequest
 
 router.get('/cinema', authenticateUser, requireCinemaManager(), async (req, res, next) => {
   try {
-    const cinema = await CinemaService.getMyCinema(req.user.id);
+    const cinema = await CinemaService.getOrCreateMyCinema(req.user.id);
     return ApiResponse.success(res, cinema);
   } catch (err) {
     next(err);
@@ -279,7 +279,7 @@ router.post('/cinema/screens/:screenId/seat-plan/publish', authenticateUser, req
 
 router.post('/seat-plans/screens/:screenId', authenticateUser, requireCinemaManager(), async (req, res, next) => {
   try {
-    const cinema = await CinemaService.getMyCinema(req.user.id);
+    const cinema = await CinemaService.getOrCreateMyCinema(req.user.id);
     const screens = await CinemaService.getScreens(req.user.id);
     const requested = screens.find((s) => s.id === req.params.screenId);
     const screen = requested || screens[0];

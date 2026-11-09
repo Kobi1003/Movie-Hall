@@ -201,7 +201,7 @@ export default function DiscoverView({
     }).then((data) => {
       if (cancelled || !Array.isArray(data)) return;
       const mapped = data
-        .filter(m => m.status === 'ACTIVE' || m.status === 'AUTHORIZED' || m.isSuperAdminAuthorized)
+        .filter(m => (m.status === 'ACTIVE' || m.status === 'AUTHORIZED') && m.status !== 'PENDING_REVIEW' && m.status !== 'DRAFT')
         .map((m) => {
         const prices = (m.theatres || []).flatMap(t => (t.ticketPrices || []).map(p => Number(p.price))).filter(Number.isFinite);
         return {
@@ -970,33 +970,6 @@ export default function DiscoverView({
             </div>
 
           </div>
-
-          {/* Admin Root Oversight Banner */}
-          <div className="mt-8 w-full p-6 rounded-3xl bg-gradient-to-r from-[#14121e] via-[#1a1726] to-[#12151e] border border-[#d0bcff]/30 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#d0bcff] to-[#a078ff] flex items-center justify-center text-[#23005c] shadow-[0_0_20px_rgba(208,188,255,0.4)] shrink-0">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
-              <div>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#d0bcff]/20 text-[#d0bcff] border border-[#d0bcff]/40 uppercase tracking-wider">
-                  Platform Administration
-                </span>
-                <h4 className="text-base sm:text-lg font-bold text-white mt-1">Admin Root Console</h4>
-                <p className="text-xs text-[#94a3b8] font-mono">
-                  Platform-wide oversight of listed shows, hall provider permissions, and booking volumes.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => onOpenAuth({ role: 'admin', isSignUp: false })}
-              className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-[#251d38] hover:bg-[#32274c] text-[#d0bcff] hover:text-white border border-[#d0bcff]/50 text-xs font-mono font-bold transition-all shadow-lg flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Admin Console</span>
-            </button>
-          </div>
-
         </div>
       </section>
 

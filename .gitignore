@@ -34,6 +34,7 @@ public/uploads/
 */public/uploads/
 
 # IDE & OS
+scratch/
 .DS_Store
 Thumbs.db
 .cursor/

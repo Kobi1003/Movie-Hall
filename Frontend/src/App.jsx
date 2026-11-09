@@ -11,8 +11,8 @@ import SeatPlannerStudio from './components/SeatPlannerStudio';
 import CheckoutModal from './components/CheckoutModal';
 import TicketPassModal from './components/TicketPassModal';
 import AuthModal from './components/AuthModal';
-import { Lock, Building2, User, Film, AlertTriangle, ArrowLeft } from 'lucide-react';
-import { getStoredUser, getAuthToken, setStoredUser, setAuthToken, authApi, bookingsApi, moviesApi } from './api.js';
+import { Lock, Building2, User, Film, AlertTriangle, ArrowLeft, KeyRound, ShieldCheck } from 'lucide-react';
+import { getStoredUser, getAuthToken, setStoredUser, setAuthToken, authApi, bookingsApi, moviesApi, loginSuperAdmin, adminApi } from './api.js';
 import { getSavedLocation } from './utils/location.js';
 
 // ── Seat Booking Wrapper (Handles direct deep linking with /book/:movieId) ───
@@ -48,12 +48,16 @@ function SeatBookingWrapper({
           matched = list.find((m) => m.id === movieId);
         }
         if (!matched && list.length > 0) {
-          matched = list[0];
+          matched = list.find(m => m.status === 'ACTIVE' || m.status === 'AUTHORIZED') || null;
+        }
+        if (matched && matched.status !== 'ACTIVE' && matched.status !== 'AUTHORIZED') {
+          matched = null;
+          setError('This film is currently under Super Admin review and cannot be booked until authorized.');
         }
         if (matched) {
           setSelectedMovie(matched);
         } else {
-          setError('No active movie found for seat virtualization.');
+          setError('No authorized active movie found for customer booking.');
         }
       })
       .catch((err) => {
@@ -175,42 +179,156 @@ function PartnerGuard({ authReady, currentUser, onOpenAuth, navigate, children }
   );
 }
 
-// ── Admin Guard (Restricts admin master console to super admins) ─────────────
-function AdminGuard({ authReady, currentUser, onOpenAuth, navigate, children }) {
+// ── Admin Guard (Guarded strictly by Tixora Root Access Key: TIX-098-245) ─────────────
+function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children }) {
+  const [rootKeyInput, setRootKeyInput] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    return (
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('tixora_root_access_key') === 'TIX-098-245' &&
+      currentUser?.role === 'admin'
+    );
+  });
+
+  const handleVerify = async (e) => {
+    if (e) e.preventDefault();
+    const key = rootKeyInput.trim();
+    if (!key) {
+      setErrorMsg('Please enter the Tixora Root Access Key.');
+      return;
+    }
+    setIsVerifying(true);
+    setErrorMsg('');
+    try {
+      const res = await adminApi.verifyRootKey(key);
+      const token = res?.token || res?.data?.token;
+      const user = res?.user || res?.data?.user;
+      if (token && user) {
+        setAuthToken(token);
+        localStorage.setItem('tixora_admin_token', token);
+        sessionStorage.setItem('tixora_root_access_key', key);
+        setStoredUser(user);
+        if (setCurrentUser) setCurrentUser(user);
+        setIsUnlocked(true);
+      } else {
+        throw new Error(res?.message || 'Verification failed');
+      }
+    } catch (err) {
+      setErrorMsg(err.message || 'Invalid Tixora Root Access Key. Access Denied.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleLockConsole = () => {
+    sessionStorage.removeItem('tixora_root_access_key');
+    localStorage.removeItem('tixora_admin_token');
+    setIsUnlocked(false);
+    setRootKeyInput('');
+    setErrorMsg('');
+    navigate('/discover');
+  };
+
   if (!authReady) {
-    return <div className="pt-32 pb-20 px-4 text-center text-sm text-[#94a3b8]">Checking your root clearance…</div>;
+    return <div className="pt-32 pb-20 px-4 text-center text-sm text-[#94a3b8]">Checking security credentials…</div>;
   }
-  if (currentUser?.role === 'admin') {
-    return children;
-  }
-  return (
-    <div className="pt-32 pb-20 px-4 max-w-lg mx-auto text-center flex flex-col items-center gap-5">
-      <div className="w-16 h-16 rounded-2xl bg-[#d0bcff]/20 border border-[#d0bcff]/40 flex items-center justify-center text-[#d0bcff] shadow-[0_0_24px_rgba(208,188,255,0.3)]">
-        <Lock className="w-8 h-8" />
+
+  // If unlocked with valid Root Access Key and authenticated as admin, show AdminRootConsole
+  if (isUnlocked && currentUser?.role === 'admin') {
+    return (
+      <div className="relative">
+        <div className="sticky top-16 z-30 bg-[#161224] border-b border-[#a078ff]/30 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse"></span>
+            <span className="text-[11px] font-mono text-[#d0bcff] font-bold tracking-wider">
+              ROOT CLEARANCE ACTIVE • KEY: TIX-098-245
+            </span>
+          </div>
+          <button
+            onClick={handleLockConsole}
+            className="px-3 py-1 rounded-lg bg-[#251d38] hover:bg-[#382b54] text-[#ffb4ab] border border-[#ffb4ab]/30 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            Lock & Exit Admin
+          </button>
+        </div>
+        {children}
       </div>
+    );
+  }
+
+  // Otherwise, display Root Access Key Challenge
+  return (
+    <div className="pt-32 pb-20 px-4 max-w-md mx-auto text-center flex flex-col items-center gap-6">
+      <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-[#3b122d] to-[#1e1329] border border-[#ffb4ab]/40 flex items-center justify-center text-[#ffb4ab] shadow-[0_0_35px_rgba(255,180,171,0.25)]">
+        <KeyRound className="w-10 h-10 text-[#d0bcff]" />
+      </div>
+
       <div>
-        <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-[#ffb4ab]/15 text-[#ffb4ab] border border-[#ffb4ab]/30 uppercase">
-          Access Denied • Root Clearance Required
+        <span className="text-[10px] font-mono font-bold px-3 py-1 rounded-full bg-[#ffb4ab]/15 text-[#ffb4ab] border border-[#ffb4ab]/30 uppercase tracking-widest">
+          High-Security Platform Console
         </span>
-        <h2 className="text-2xl font-extrabold text-white mt-3">Admin Root Console Restricted</h2>
-        <p className="text-xs text-[#94a3b8] font-mono mt-2">
-          Platform-wide show verification, hall approvals, and master controls are restricted strictly to platform super-administrators.
+        <h2 className="text-2xl font-black text-white mt-3">Root Access Key Required</h2>
+        <p className="text-xs text-[#94a3b8] font-mono mt-2 leading-relaxed">
+          The Admin Console is guarded by master platform authorization. Enter your assigned <strong className="text-[#d0bcff]">Tixora Root Access Key</strong> to unlock the console.
         </p>
       </div>
-      <div className="flex flex-col sm:flex-row items-center gap-3 w-full pt-2">
+
+      <form onSubmit={handleVerify} className="w-full space-y-3 bg-[#11131a] p-5 rounded-2xl border border-[#232938] text-left">
+        <div>
+          <label className="block text-[11px] font-mono uppercase text-[#94a3b8] mb-1.5 font-bold">
+            Tixora Root Access Key
+          </label>
+          <input
+            type="password"
+            autoFocus
+            value={rootKeyInput}
+            onChange={(e) => {
+              setRootKeyInput(e.target.value);
+              setErrorMsg('');
+            }}
+            placeholder="e.g. TIX-098-245"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-[#08090d] border border-[#232938] text-white font-mono text-sm tracking-wider focus:border-[#a078ff] focus:ring-1 focus:ring-[#a078ff] outline-none transition-all placeholder:text-[#494454]"
+          />
+        </div>
+
+        {errorMsg && (
+          <div className="p-2.5 rounded-xl bg-[#ffb4ab]/10 border border-[#ffb4ab]/30 text-xs font-mono text-[#ffb4ab] flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         <button
-          onClick={() => onOpenAuth({ role: 'admin', isSignUp: false })}
-          className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[#d0bcff] to-[#a078ff] text-[#23005c] font-bold text-xs font-mono shadow-[0_0_20px_rgba(208,188,255,0.4)] hover:brightness-110 transition-all cursor-pointer"
+          type="submit"
+          disabled={isVerifying}
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-[#a078ff] to-[#6d3bd7] text-white font-bold text-xs font-mono shadow-[0_0_20px_rgba(160,120,255,0.4)] hover:brightness-110 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          Sign In as Admin
+          {isVerifying ? (
+            <span>Verifying Root Clearance…</span>
+          ) : (
+            <>
+              <ShieldCheck className="w-4 h-4" />
+              <span>Verify Root Access Key</span>
+            </>
+          )}
         </button>
-        <button
-          onClick={() => navigate('/discover')}
-          className="w-full sm:w-auto py-3 px-4 rounded-xl bg-[#181c26] text-[#cbc3d7] hover:text-white font-bold text-xs font-mono border border-[#232938] cursor-pointer"
-        >
-          Return to Home
-        </button>
-      </div>
+
+        <p className="text-[10px] text-center text-[#64748b] font-mono pt-1">
+          Root access keys are confidential and configured in project environment variables.
+        </p>
+      </form>
+
+      <button
+        type="button"
+        onClick={() => navigate('/discover')}
+        className="text-xs text-[#94a3b8] hover:text-white font-mono transition-colors cursor-pointer flex items-center gap-1.5"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" />
+        Return to Customer Portal
+      </button>
     </div>
   );
 }
@@ -315,11 +433,33 @@ export default function App() {
     }
   };
 
-  // Sync mode with stored user role on initial load
+  // Sync mode with stored user role on initial load and keep cross-tab state in sync
   useEffect(() => {
     if (currentUser?.role) {
       setCurrentMode(currentUser.role);
     }
+  }, []);
+
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'tixora_user' || e.key === 'tixora_token') {
+        const stored = getStoredUser();
+        setCurrentUser(stored);
+        if (stored?.role) setCurrentMode(stored.role);
+      }
+    };
+    const handleCustomAuthChange = (e) => {
+      if (e.detail) {
+        setCurrentUser(e.detail);
+        if (e.detail.role) setCurrentMode(e.detail.role);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('tixora_auth_changed', handleCustomAuthChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('tixora_auth_changed', handleCustomAuthChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -546,7 +686,7 @@ export default function App() {
           />
 
           {/* Cinema Partner / Movie Provider Routes */}
-          <Route path="/partner" element={<Navigate to="/partner/shows" replace />} />
+          <Route path="/partner" element={<Navigate to="/partner/films/new" replace />} />
           <Route
             path="/partner/shows"
             element={
@@ -638,6 +778,7 @@ export default function App() {
               <AdminGuard
                 authReady={authReady}
                 currentUser={currentUser}
+                setCurrentUser={setCurrentUser}
                 onOpenAuth={handleOpenAuth}
                 navigate={navigate}
               >
@@ -693,18 +834,6 @@ export default function App() {
               className="hover:text-white cursor-pointer"
             >
               Partner Studio
-            </button>
-            <button 
-              onClick={() => {
-                if (currentUser?.role === 'admin') {
-                  navigate('/admin/console');
-                } else {
-                  handleOpenAuth({ role: 'admin', isSignUp: false });
-                }
-              }} 
-              className="hover:text-white cursor-pointer"
-            >
-              Admin Console
             </button>
           </div>
         </div>

@@ -194,12 +194,12 @@ export class ReservationService {
 
       // 3. Atomically transition seats to HELD in Supabase and memoryStore
       for (const seat of candidateSeats) {
-        if (ENV.NODE_ENV === 'test') {
-          await supabaseAdmin.from('show_seats').update({
-            status: 'HELD', hold_id: holdId, hold_user_id: userId,
-            held_until: expiresAt, updated_at: new Date().toISOString()
-          }).eq('id', seat.id);
-        }
+        // Persist to Supabase show_seats
+        await supabaseAdmin.from('show_seats').update({
+          status: 'HELD', hold_id: holdId, hold_user_id: userId,
+          held_until: persistedExpiresAt, updated_at: new Date().toISOString()
+        }).eq('id', seat.id);
+
         // Update memoryStore
         const memSeat = memoryStore.showSeats.get(seat.id) || seat;
         memSeat.status = 'HELD';

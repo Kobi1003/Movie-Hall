@@ -1,4 +1,10 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
 
 export const ENV = {
@@ -24,7 +30,21 @@ export const ENV = {
   PAYMENT_API_KEY: process.env.PAYMENT_API_KEY || 'mock_key',
   PAYMENT_WEBHOOK_SECRET: process.env.PAYMENT_WEBHOOK_SECRET || 'mock_webhook_secret',
 
-  GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY || ''
+  GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY || '',
+  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+
+  // EmailJS Integration
+  EMAILJS_SERVICE_ID: process.env.EMAILJS_SERVICE_ID || 'service_x7p0m0w',
+  EMAILJS_PUBLIC_KEY: process.env.EMAILJS_PUBLIC_KEY || process.env.EMAILJS_USER_ID || '',
+  EMAILJS_PRIVATE_KEY: process.env.EMAILJS_PRIVATE_KEY || process.env.EMAILJS_ACCESS_TOKEN || '',
+  EMAILJS_TEMPLATE_ID: process.env.EMAILJS_TEMPLATE_ID || '',
+  EMAILJS_TEMPLATE_ACCOUNT_CREATED: process.env.EMAILJS_TEMPLATE_ACCOUNT_CREATED || '',
+  EMAILJS_TEMPLATE_OTP: process.env.EMAILJS_TEMPLATE_OTP || '',
+  EMAILJS_TEMPLATE_REGISTRATION: process.env.EMAILJS_TEMPLATE_REGISTRATION || '',
+  EMAILJS_TEMPLATE_TICKET: process.env.EMAILJS_TEMPLATE_TICKET || '',
+
+  // Root Master Security Access
+  TIXORA_ROOT_ACCESS_KEY: process.env.TIXORA_ROOT_ACCESS_KEY || 'TIX-098-245'
 };
 
 export function validateProductionEnv() {

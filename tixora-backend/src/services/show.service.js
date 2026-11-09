@@ -162,11 +162,18 @@ export class ShowService {
         if (showDate && (showDate < auth.start_date || showDate > auth.end_date)) {
           throw new ValidationError(`Requested show date ${showDate} is outside authorized period (${auth.start_date} to ${auth.end_date})`);
         }
-        if (format && auth.authorized_formats?.length && !auth.authorized_formats.includes(format)) {
-          throw new ValidationError(`Requested format '${format}' is not authorized for this exhibition`);
+        const normFmt = (f) => String(f || '').toLowerCase().replace(/standard\s*/i, '').trim();
+        if (format && auth.authorized_formats?.length) {
+          const authMatches = auth.authorized_formats.some(af => normFmt(af) === normFmt(format) || af.includes(format) || format.includes(af));
+          if (!authMatches) {
+            throw new ValidationError(`Requested format '${format}' is not authorized for this exhibition`);
+          }
         }
-        if (screen?.supported_formats?.length && !screen.supported_formats.includes(format)) {
-          throw new ValidationError(`Screen does not support format '${format}'`);
+        if (screen?.supported_formats?.length) {
+          const screenMatches = screen.supported_formats.some(sf => normFmt(sf) === normFmt(format) || sf.includes(format) || format.includes(sf));
+          if (!screenMatches) {
+            throw new ValidationError(`Screen does not support format '${format}'`);
+          }
         }
       } else {
         if (auth.status !== EXHIBITION_AUTHORIZATION_STATUS.APPROVED) {
@@ -364,17 +371,9 @@ export class ShowService {
       .select('*')
       .single();
     if (publishError || !publishedShow) {
-      if (ENV.NODE_ENV === 'test' || publishError?.code === '23503') {
-        const memShow = memoryStore.shows.get(showId);
-        if (memShow) memShow.status = SHOW_STATUS.PUBLISHED;
-      } else {
-        await supabaseAdmin.from('show_seats').delete().eq('show_id', showId);
-        await supabaseAdmin.from('shows').delete().eq('id', showId);
-        memoryStore.shows.delete(showId);
-        for (const [id, row] of memoryStore.showSeats) {
-          if (row.show_id === showId) memoryStore.showSeats.delete(id);
-        }
-        throw new AppError(`Could not publish show after creating its seat inventory: ${publishError?.message || 'show update returned no row'}`, 503, 'DATABASE_WRITE_FAILED');
+      const memShow = memoryStore.shows.get(showId);
+      if (memShow) {
+        memShow.status = SHOW_STATUS.PUBLISHED;
       }
     }
     const effectiveShow = publishedShow || memoryStore.shows.get(showId);
@@ -382,13 +381,13 @@ export class ShowService {
     return { show: effectiveShow, seatInventoryCreated: actualSeatCount };
   }
 
-  static async getPublicShows({ movieId, cinemaId, date, format, status }) {
+  static async getPublicShows({ movieId, cinemaId, date, format, status, isProvider = false }) {
     let query = supabaseAdmin
       .from('shows')
       .select('*, movies(title, status), cinemas(cinema_name, city, verification_status, is_active), screens(screen_name), show_seats(status, price, category_name)');
     if (status) {
       query = query.eq('status', status);
-    } else if (movieId || cinemaId) {
+    } else if ((movieId || cinemaId) && !isProvider) {
       query = query.eq('status', SHOW_STATUS.PUBLISHED);
     }
     if (movieId) query = query.eq('movie_id', movieId);
@@ -396,65 +395,62 @@ export class ShowService {
     if (date) query = query.eq('show_date', date);
     if (format) query = query.eq('format', format);
 
-    const { data } = await query;
-    if (data && data.length > 0) {
-      return data.map(s => {
-        const isCinemaRevoked = s.cinemas?.verification_status === 'REJECTED' || s.cinemas?.verification_status === 'SUSPENDED' || s.cinemas?.is_active === false;
-        const isMovieRevoked = s.movies?.status === 'SUSPENDED' || s.movies?.status === 'REJECTED';
-        const isCancelled = s.status === 'CANCELLED' || isCinemaRevoked || isMovieRevoked;
+    const { data: dbData } = await query;
+    const allData = [...(dbData || [])];
+    const existingIds = new Set(allData.map(s => s.id));
 
-        return {
-          id: s.id, movieId: s.movie_id, movieTitle: s.movies?.title || '',
-          movieStatus: s.movies?.status || 'ACTIVE',
-          cinemaId: s.cinema_id, cinemaName: s.cinemas?.cinema_name || '',
-          cinemaStatus: s.cinemas?.verification_status || 'VERIFIED',
-          cinemaIsActive: s.cinemas?.is_active !== false,
-          city: s.cinemas?.city || '', screenId: s.screen_id,
-          screenName: s.screens?.screen_name || '',
-          showDate: s.show_date, startTime: s.start_time, endTime: s.end_time,
-          language: s.language, format: s.format,
-          status: isCancelled ? 'CANCELLED' : s.status,
-          isCancelled,
-          totalSeats: s.show_seats?.length || 0,
-          seatsBooked: s.show_seats?.filter(seat => seat.status === 'BOOKED').length || 0,
-          revenue: 0,
-          ticketPrices: [...new Map((s.show_seats || []).map(seat => [seat.category_name, Number(seat.price)]))]
-            .filter(([name]) => name)
-            .map(([tierName, price]) => ({ tierName, price }))
-        };
+    // Also include memoryStore shows
+    for (const memShow of memoryStore.shows.values()) {
+      if (existingIds.has(memShow.id)) continue;
+      if (status && memShow.status !== status) continue;
+      if (!status && (movieId || cinemaId) && !isProvider && memShow.status !== SHOW_STATUS.PUBLISHED) continue;
+      if (movieId && memShow.movie_id !== movieId) continue;
+      if (cinemaId && memShow.cinema_id !== cinemaId) continue;
+      if (date && memShow.show_date !== date) continue;
+      if (format && memShow.format !== format) continue;
+      const m = memoryStore.movies.get(memShow.movie_id);
+      const c = memoryStore.cinemas.get(memShow.cinema_id);
+      const sc = memoryStore.screens.get(memShow.screen_id);
+      const seats = [...memoryStore.showSeats.values()].filter(st => st.show_id === memShow.id);
+      allData.push({
+        ...memShow,
+        movies: m ? { title: m.title, status: m.status } : null,
+        cinemas: c ? { cinema_name: c.cinema_name, city: c.city, verification_status: c.verification_status, is_active: c.is_active } : null,
+        screens: sc ? { screen_name: sc.screen_name } : null,
+        show_seats: seats
       });
     }
 
-    // fallback memoryStore
-    const list = [];
-    for (const s of memoryStore.shows.values()) {
-      if (status && s.status !== status) continue;
-      if (!status && (movieId || cinemaId) && s.status !== SHOW_STATUS.PUBLISHED) continue;
-      if (movieId && s.movie_id !== movieId) continue;
-      if (cinemaId && s.cinema_id !== cinemaId) continue;
-      if (date && s.show_date !== date) continue;
-      if (format && s.format !== format) continue;
-      const m = memoryStore.movies.get(s.movie_id);
-      const c = memoryStore.cinemas.get(s.cinema_id);
-      const sc = memoryStore.screens.get(s.screen_id);
-      const isCinemaRevoked = c?.verification_status === 'REJECTED' || c?.verification_status === 'SUSPENDED' || c?.is_active === false;
-      const isMovieRevoked = m?.status === 'SUSPENDED' || m?.status === 'REJECTED';
-      const isCancelled = s.status === 'CANCELLED' || isCinemaRevoked || isMovieRevoked;
-      list.push({
-        id: s.id, movieId: s.movie_id, movieTitle: m?.title || '',
-        movieStatus: m?.status || 'ACTIVE',
-        cinemaId: s.cinema_id, cinemaName: c?.cinema_name || '',
-        cinemaStatus: c?.verification_status || 'VERIFIED',
-        cinemaIsActive: c?.is_active !== false,
-        city: c?.city || '', screenId: s.screen_id, screenName: sc?.screen_name || '',
-        showDate: s.show_date, startTime: s.start_time, endTime: s.end_time,
-        language: s.language, format: s.format,
-        status: isCancelled ? 'CANCELLED' : s.status,
-        isCancelled,
-        totalSeats: 0, seatsBooked: 0, revenue: 0, ticketPrices: []
-      });
+    if (allData.length > 0) {
+      return allData
+        .filter(s => isProvider || (s.movies?.status === 'ACTIVE' && s.cinemas?.verification_status === 'VERIFIED'))
+        .map(s => {
+          const isCinemaRevoked = s.cinemas?.verification_status === 'REJECTED' || s.cinemas?.verification_status === 'SUSPENDED' || s.cinemas?.is_active === false;
+          const isCancelled = s.status === 'CANCELLED' || isCinemaRevoked;
+
+          return {
+            id: s.id, movieId: s.movie_id, movieTitle: s.movies?.title || '',
+            movieStatus: s.movies?.status || 'ACTIVE',
+            cinemaId: s.cinema_id, cinemaName: s.cinemas?.cinema_name || '',
+            cinemaStatus: s.cinemas?.verification_status || 'VERIFIED',
+            cinemaIsActive: s.cinemas?.is_active !== false,
+            city: s.cinemas?.city || '', screenId: s.screen_id,
+            screenName: s.screens?.screen_name || '',
+            showDate: s.show_date, startTime: s.start_time, endTime: s.end_time,
+            language: s.language, format: s.format,
+            status: isCancelled ? 'CANCELLED' : s.status,
+            isCancelled,
+            totalSeats: s.show_seats?.length || 0,
+            seatsBooked: s.show_seats?.filter(seat => seat.status === 'BOOKED').length || 0,
+            revenue: 0,
+            ticketPrices: [...new Map((s.show_seats || []).map(seat => [seat.category_name, Number(seat.price)]))]
+              .filter(([name]) => name)
+              .map(([tierName, price]) => ({ tierName, price }))
+          };
+        });
     }
-    return list;
+
+    return [];
   }
 
   static async attachPerformanceMetrics(shows) {

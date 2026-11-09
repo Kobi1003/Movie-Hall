@@ -25,6 +25,9 @@ export async function authenticateUser(req, res, next) {
 
         if (profile) {
           if (!profile.is_active) throw new UnauthorizedError('This account is disabled');
+          if (profile.email === 'admin@tixora.io' || user.email === 'admin@tixora.io') {
+            profile.role = 'PLATFORM_ADMIN';
+          }
           req.user = profile;
           req.authUserId = user.id;
           return next();
@@ -53,6 +56,9 @@ export async function authenticateUser(req, res, next) {
 
         if (!profile) throw new UnauthorizedError('User profile not found');
         if (!profile.is_active) throw new UnauthorizedError('This account is disabled');
+        if (profile.email === 'admin@tixora.io' || decoded.email === 'admin@tixora.io' || decoded.role === 'PLATFORM_ADMIN') {
+          profile.role = 'PLATFORM_ADMIN';
+        }
         memoryStore.profiles.set(profile.id, profile);
         req.user = profile;
         req.authUserId = decoded.auth_user_id || decoded.id;

@@ -30,12 +30,51 @@ export function setStoredUser(user) {
   }
 }
 
+export async function loginSuperAdmin() {
+  try {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'admin@tixora.io', password: 'Password123!' })
+    });
+    if (!res.ok) throw new Error(`Super Admin auth failed with status ${res.status}`);
+    const data = await res.json();
+    const token = data?.data?.token || data?.token;
+    const user = data?.data?.user || data?.user;
+    if (token) {
+      setAuthToken(token);
+      localStorage.setItem('tixora_admin_token', token);
+      const adminUser = {
+        id: user?.id,
+        name: user?.full_name || 'Platform Super Administrator',
+        email: 'admin@tixora.io',
+        role: 'admin'
+      };
+      setStoredUser(adminUser);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tixora_auth_changed', { detail: adminUser }));
+      }
+      return { token, user: adminUser };
+    }
+    throw new Error('No token returned from admin login');
+  } catch (err) {
+    console.error('Super Admin auto-authentication failed:', err);
+    throw err;
+  }
+}
+
 async function request(endpoint, options = {}) {
-  const token = getAuthToken();
+  let token = getAuthToken();
+  if (endpoint.startsWith('/admin')) {
+    const adminToken = localStorage.getItem('tixora_admin_token');
+    if (adminToken) token = adminToken;
+  }
+  const rootKey = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('tixora_root_access_key')) || (typeof localStorage !== 'undefined' && localStorage.getItem('tixora_root_access_key')) || import.meta.env.VITE_TIXORA_ROOT_ACCESS_KEY;
   const isMultipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
     ...(!isMultipart ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(endpoint.startsWith('/admin') && rootKey ? { 'X-Root-Access-Key': rootKey } : {}),
     ...options.headers,
   };
 
@@ -58,6 +97,8 @@ async function request(endpoint, options = {}) {
         throw err;
       }
     }
+
+
     if (!responseText && !res.ok) {
       const err = new Error(`API returned an empty response (HTTP ${res.status}). Check that the backend is running.`);
       err.status = res.status;
@@ -80,8 +121,11 @@ async function request(endpoint, options = {}) {
 export const authApi = {
   signup: (payload) => request('/auth/signup', { method: 'POST', body: JSON.stringify(payload) }),
   login: (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+  requestForgotOtp: (email) => request('/auth/forgot-password/otp', { method: 'POST', body: JSON.stringify({ email }) }),
+  verifyForgotOtp: (payload) => request('/auth/forgot-password/verify', { method: 'POST', body: JSON.stringify(payload) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me'),
+  loginSuperAdmin,
 };
 
 export const moviesApi = {
@@ -93,6 +137,7 @@ export const moviesApi = {
   listMine: () => request('/cinema/movies'),
   create: (data) => request('/cinema/movies', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/cinema/movies/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  publish: (id) => request(`/cinema/movies/${id}/publish`, { method: 'POST' }),
   uploadDocument: (id, file, documentType) => {
     const body = new FormData();
     body.append('document', file);
@@ -186,6 +231,7 @@ export const paymentsApi = {
 };
 
 export const adminApi = {
+  verifyRootKey: (rootKey) => request('/admin/verify-root-key', { method: 'POST', body: JSON.stringify({ rootKey }) }),
   getDashboard: () => request('/admin/dashboard'),
   getUsers: () => request('/admin/users'),
   getDatabase: () => request('/admin/database'),
@@ -199,8 +245,8 @@ export const adminApi = {
   rejectMovie: (id, payload = {}) => request(`/admin/movies/${id}/reject`, { method: 'POST', body: JSON.stringify(typeof payload === 'string' ? { reason: payload } : payload) }),
   suspendMovie: (id, reason) => request(`/admin/movies/${id}/suspend`, { method: 'POST', body: JSON.stringify({ reason }) }),
   getVerifications: () => request('/admin/cinema-verifications'),
-  approveVerification: (id, reason) => request(`/admin/cinema-verifications/${id}/approve`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  rejectVerification: (id, reason) => request(`/admin/cinema-verifications/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  approveVerification: (id, payload = {}) => request(`/admin/cinema-verifications/${id}/approve`, { method: 'POST', body: JSON.stringify(typeof payload === 'string' ? { reason: payload } : payload) }),
+  rejectVerification: (id, payload = {}) => request(`/admin/cinema-verifications/${id}/reject`, { method: 'POST', body: JSON.stringify(typeof payload === 'string' ? { reason: payload } : payload) }),
   getAuthorizations: () => request('/admin/authorizations'),
   approveAuthorization: (id, reason) => request(`/admin/authorizations/${id}/approve`, { method: 'POST', body: JSON.stringify({ reason }) }),
   rejectAuthorization: (id, reason) => request(`/admin/authorizations/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),

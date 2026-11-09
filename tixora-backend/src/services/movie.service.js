@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin, memoryStore } from '../config/supabase.js';
 import { AppError, NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
 import { GeoService } from './geo.service.js';
+import { EmailService } from './email.service.js';
+import { logger } from '../utils/logger.js';
 
 function parseDurationMinutes(movieData) {
   if (Number.isFinite(movieData.durationMinutes)) return movieData.durationMinutes;
@@ -117,21 +119,24 @@ export class MovieService {
 
   static async createMovie(providerUserId, movieData) {
     const payload = this.normalizePayload(movieData);
+    let movieCode = payload.movieCode;
     const { data: existing } = await supabaseAdmin
       .from('movies')
       .select('id')
-      .ilike('movie_code', payload.movieCode)
+      .ilike('movie_code', movieCode)
       .maybeSingle();
-    if (existing) throw new ValidationError(`Movie code '${payload.movieCode}' already exists`);
+    if (existing) {
+      movieCode = `${movieCode}-${Date.now().toString().slice(-4)}`;
+    }
 
     const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', providerUserId).maybeSingle();
     const isAdmin = profile?.role === 'PLATFORM_ADMIN';
-    const initialStatus = isAdmin ? 'ACTIVE' : 'PENDING_REVIEW';
+    const initialStatus = isAdmin ? (payload.status || 'ACTIVE') : (movieData.isDraft ? 'DRAFT' : 'PENDING_REVIEW');
 
     const movieId = uuidv4();
     const movie = {
       id: movieId,
-      movie_code: payload.movieCode,
+      movie_code: movieCode,
       title: payload.title,
       original_title: payload.originalTitle,
       synopsis: payload.synopsis,
@@ -162,6 +167,18 @@ export class MovieService {
     const { error } = await supabaseAdmin.from('movies').insert(movie);
     if (error) throw new ValidationError(`Failed to create movie: ${error.message}`);
     memoryStore.movies.set(movieId, movie);
+
+    // Send movie registration confirmation email via EmailJS
+    if (profile?.email) {
+      EmailService.sendMovieRegisteredEmail({
+        toEmail: profile.email,
+        toName: profile.full_name || 'Movie Partner',
+        movieTitle: movie.title,
+        cbfcNumber: movie.cbfc_certificate_number,
+        formats: payload.formats
+      }).catch(err => logger.warn('[EMAIL] Movie registration email failed:', err.message));
+    }
+
     const catalogFilm = this.toCatalogFilm(movie);
     return {
       ...movie,
@@ -175,14 +192,65 @@ export class MovieService {
   }
 
   static async getProviderMovies(providerUserId, userRole = null) {
+    let cinemaId = null;
+    if (providerUserId) {
+      try {
+        const { data: cinemas } = await supabaseAdmin
+          .from('cinemas')
+          .select('id')
+          .eq('owner_user_id', providerUserId)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (cinemas?.[0]?.id) {
+          cinemaId = cinemas[0].id;
+        }
+      } catch (_) {}
+    }
+
+    // 1. Strictly query movies registered by this specific provider
     let query = supabaseAdmin.from('movies').select('*');
-    // Enforce exclusivity: strictly filter by the logged-in provider's user id
-    if (providerUserId && userRole !== 'PLATFORM_ADMIN') {
+    if (providerUserId) {
       query = query.eq('created_by_provider', providerUserId);
     }
-    const { data: moviesData } = await query.order('created_at', { ascending: false });
-    let rows = moviesData || [];
-    if (!moviesData || moviesData.length === 0) {
+    const { data: moviesCreated } = await query.order('created_at', { ascending: false });
+    let rows = moviesCreated || [];
+
+    // 2. Also include any movies authorized or scheduled for this provider's specific hall
+    if (cinemaId) {
+      try {
+        const { data: hallShows } = await supabaseAdmin
+          .from('shows')
+          .select('movie_id')
+          .eq('cinema_id', cinemaId)
+          .neq('status', 'CANCELLED');
+        const hallMovieIds = (hallShows || []).map(s => s.movie_id).filter(Boolean);
+
+        const { data: hallAuths } = await supabaseAdmin
+          .from('exhibition_authorizations')
+          .select('movie_id')
+          .eq('cinema_id', cinemaId)
+          .eq('status', 'APPROVED');
+        const authMovieIds = (hallAuths || []).map(a => a.movie_id).filter(Boolean);
+
+        const additionalMovieIds = Array.from(new Set([...hallMovieIds, ...authMovieIds])).filter(
+          id => !rows.some(r => r.id === id)
+        );
+
+        if (additionalMovieIds.length > 0) {
+          const { data: extraMovies } = await supabaseAdmin
+            .from('movies')
+            .select('*')
+            .in('id', additionalMovieIds);
+          if (extraMovies && extraMovies.length > 0) {
+            rows = [...rows, ...extraMovies];
+          }
+        }
+      } catch (err) {
+        console.warn('Error fetching hall-specific movies:', err.message);
+      }
+    }
+
+    if (rows.length === 0 && (!moviesCreated || moviesCreated.length === 0)) {
       rows = [...memoryStore.movies.values()].filter(
         (m) => (userRole === 'PLATFORM_ADMIN') || (providerUserId && m.created_by_provider === providerUserId)
       );
@@ -196,22 +264,29 @@ export class MovieService {
     const seenTitles = new Set();
     const uniqueRows = [];
     for (const r of rows) {
-      const key = `${r.title?.toLowerCase()}_${r.created_by_provider}`;
+      const key = `${r.title?.toLowerCase()}_${r.created_by_provider || 'hall'}`;
       if (!seenTitles.has(key)) {
         seenTitles.add(key);
         uniqueRows.push(r);
       }
     }
 
-    // Fetch any scheduled shows for these movies to populate live timings and dates
+    // Fetch scheduled shows for these movies TO POPULATE THIS HALL'S TIMINGS AND DATES ONLY
     let showsMap = new Map();
     try {
       const movieIds = uniqueRows.map((r) => r.id);
-      const { data: showsData } = await supabaseAdmin
+      let showsQuery = supabaseAdmin
         .from('shows')
         .select('id, movie_id, show_date, start_time, screen_id, cinema_id, status, screens(capacity), show_seats(status)')
         .in('movie_id', movieIds)
         .neq('status', 'CANCELLED');
+
+      // STRICT ISOLATION: Only include shows from this provider's cinema hall
+      if (cinemaId) {
+        showsQuery = showsQuery.eq('cinema_id', cinemaId);
+      }
+
+      const { data: showsData } = await showsQuery;
 
       if (showsData && showsData.length > 0) {
         for (const s of showsData) {
@@ -278,7 +353,12 @@ export class MovieService {
 
   static async updateMovie(providerUserId, movieId, updateData) {
     const movie = await this.getMovieById(movieId);
-    if (movie.created_by_provider !== providerUserId) throw new ForbiddenError('Unauthorized: You do not own this movie');
+    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', providerUserId).maybeSingle();
+    const isAdmin = profile?.role === 'PLATFORM_ADMIN';
+    const isExhibitor = profile?.role === 'CINEMA_OWNER' || profile?.role === 'MOVIE_PROVIDER';
+    if (!isAdmin && !isExhibitor && movie.created_by_provider && movie.created_by_provider !== providerUserId) {
+      throw new ForbiddenError('Unauthorized: You do not own this movie');
+    }
     const payload = this.normalizePayload({
       title: updateData.title || movie.title,
       originalTitle: updateData.originalTitle || movie.original_title,
@@ -307,7 +387,9 @@ export class MovieService {
       trailer_url: payload.trailerUrl,
       default_start_time: payload.defaultStartTime,
       formats: payload.formats,
-      status: movie.status === 'ACTIVE' ? (updateData.status || 'ACTIVE') : 'PENDING_REVIEW',
+      status: isAdmin
+        ? (updateData.status || movie.status)
+        : (updateData.isDraft ? 'DRAFT' : (movie.status === 'ACTIVE' ? 'ACTIVE' : 'PENDING_REVIEW')),
       updated_at: new Date().toISOString()
     };
     const { data: savedMovie, error } = await supabaseAdmin.from('movies').update(updated).eq('id', movieId).select('*').single();
@@ -318,6 +400,34 @@ export class MovieService {
     return {
       ...merged,
       ...catalogFilm,
+      posterUrl: merged.poster_path,
+      posterPath: merged.poster_path,
+      poster_path: merged.poster_path,
+      poster: merged.poster_path
+    };
+  }
+
+  static async publishMovie(providerUserId, movieId) {
+    const movie = await this.getMovieById(movieId);
+    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', providerUserId).maybeSingle();
+    const isAdmin = profile?.role === 'PLATFORM_ADMIN';
+    const isExhibitor = profile?.role === 'CINEMA_OWNER' || profile?.role === 'MOVIE_PROVIDER';
+    if (!isAdmin && !isExhibitor && movie.created_by_provider && movie.created_by_provider !== providerUserId) {
+      throw new ForbiddenError('Unauthorized: You do not own this movie');
+    }
+
+    const updated = {
+      status: 'ACTIVE',
+      updated_at: new Date().toISOString()
+    };
+    const { data: savedMovie, error } = await supabaseAdmin.from('movies').update(updated).eq('id', movieId).select('*').single();
+    if (error) throw new AppError(`Failed to publish movie: ${error.message}`, 503, 'DATABASE_WRITE_FAILED');
+    const merged = savedMovie || { ...movie, ...updated };
+    memoryStore.movies.set(movieId, merged);
+
+    return {
+      ...merged,
+      ...this.toCatalogFilm(merged),
       posterUrl: merged.poster_path,
       posterPath: merged.poster_path,
       poster_path: merged.poster_path,
@@ -369,15 +479,31 @@ export class MovieService {
       }
     }
 
-    const { data: shows, error: showsError } = await supabaseAdmin
+    const { data: dbShows } = await supabaseAdmin
       .from('shows')
       .select('*, cinemas(id, cinema_name, city, address, latitude, longitude, verification_status), screens(id, screen_name, audio_format, supported_formats), show_seats(category_name, price, status)')
       .eq('status', 'PUBLISHED')
       .order('show_date', { ascending: true });
-    if (showsError) throw new AppError('Could not load showtimes from the database', 503, 'DATABASE_UNAVAILABLE');
+
+    const allShowsList = [...(dbShows || [])];
+    const existingShowIds = new Set(allShowsList.map(s => s.id));
+
+    for (const memShow of memoryStore.shows.values()) {
+      if (memShow.status === 'PUBLISHED' && !existingShowIds.has(memShow.id)) {
+        const c = memoryStore.cinemas.get(memShow.cinema_id);
+        const sc = memoryStore.screens.get(memShow.screen_id);
+        const seats = [...memoryStore.showSeats.values()].filter(st => st.show_id === memShow.id);
+        allShowsList.push({
+          ...memShow,
+          cinemas: c ? { id: c.id, cinema_name: c.cinema_name, city: c.city, address: c.address, latitude: c.latitude, longitude: c.longitude, verification_status: c.verification_status } : null,
+          screens: sc ? { id: sc.id, screen_name: sc.screen_name, audio_format: sc.audio_format, supported_formats: sc.supported_formats } : null,
+          show_seats: seats
+        });
+      }
+    }
 
     const showsByMovie = new Map();
-    for (const s of (shows || [])) {
+    for (const s of allShowsList) {
       const list = showsByMovie.get(s.movie_id) || [];
       list.push(s);
       showsByMovie.set(s.movie_id, list);
@@ -390,6 +516,7 @@ export class MovieService {
       const theatreMap = new Map();
 
       for (const s of related) {
+        if (s.cinemas?.verification_status !== 'VERIFIED') continue;
         const theatreKey = `${s.cinema_id}:${s.screen_id}`;
         if (!theatreMap.has(theatreKey)) {
           theatreMap.set(theatreKey, {
@@ -569,9 +696,12 @@ export class MovieService {
     try {
       const fs = await import('fs');
       const path = await import('path');
-      const dir = path.join(process.cwd(), 'public', 'uploads', 'posters');
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, safeFilename), file.buffer);
+      const dir1 = path.join(process.cwd(), 'public', 'uploads', 'posters');
+      const dir2 = path.join(process.cwd(), 'tixora-backend', 'public', 'uploads', 'posters');
+      if (!fs.existsSync(dir1)) fs.mkdirSync(dir1, { recursive: true });
+      if (!fs.existsSync(dir2)) fs.mkdirSync(dir2, { recursive: true });
+      fs.writeFileSync(path.join(dir1, safeFilename), file.buffer);
+      fs.writeFileSync(path.join(dir2, safeFilename), file.buffer);
       posterUrl = `/uploads/posters/${safeFilename}`;
     } catch (e) {
       console.warn('Local disk save fallback warning:', e.message);
