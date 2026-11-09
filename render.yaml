@@ -29,3 +29,4 @@ services:
         sync: false
       - key: EMAILJS_PRIVATE_KEY
         sync: false
+

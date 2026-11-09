@@ -1,260 +1,221 @@
-# 🎬 TIXORA — Modern Cinema Ticket Booking & Hall Management System
+# 🎬 TIXORA — Enterprise Cinema Ticketing & Hall Exhibition Platform
 
-![Node.js](https://img.shields.io/badge/Node.js-v18%2B-339933?style=flat&logo=node.js)
-![React](https://img.shields.io/badge/React-v19-61DAFB?style=flat&logo=react)
-![Vite](https://img.shields.io/badge/Vite-v6-646CFF?style=flat&logo=vite)
-![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-06B6D4?style=flat&logo=tailwindcss)
-![Redis](https://img.shields.io/badge/Redis-v7-DC382D?style=flat&logo=redis)
-![RabbitMQ](https://img.shields.io/badge/RabbitMQ-v3-FF6600?style=flat&logo=rabbitmq)
-![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat&logo=supabase)
-![License](https://img.shields.io/badge/License-ISC-blue?style=flat)
+[![Live App](https://img.shields.io/badge/Live%20App-Vercel-black?style=for-the-badge&logo=vercel)](https://movie-hall-bice.vercel.app/)
+[![Backend API](https://img.shields.io/badge/Backend%20API-Render-46E3B7?style=for-the-badge&logo=render)](https://tixora-backend-w24j.onrender.com/health)
+[![Node.js](https://img.shields.io/badge/Node.js-v18%2B%20%7C%20v24-339933?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-v19-61DAFB?style=for-the-badge&logo=react)](https://react.dev/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss)](https://tailwindcss.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%2015-3ECF8E?style=for-the-badge&logo=supabase)](https://supabase.com/)
 
-> **Tixora** is an end-to-end, enterprise-grade movie ticketing and cinema exhibition platform. It connects moviegoers with local cinema halls via intelligent geospatial discovery, zero-race-condition seat holds, and instant digital QR passes, while empowering cinema hall operators with a full-fledged exhibition dashboard.
+> **TIXORA** is a full-stack, enterprise-grade cinema ticket booking and multi-hall exhibition platform. Built with high-concurrency seat reservation locks, zero-race-condition booking queues, dynamic QR ticket passes, automated EmailJS ticketing dispatch, a multi-screen cinema provider studio, and a cryptographic root-access admin console.
 
 ---
 
-## 🌟 Key Highlights
+## 🌐 Live Production Deployments
 
-* 📍 **Smart Geospatial Hall Discovery**: Automatically detects user location and calculates Haversine distances to rank cinemas by closest proximity, complete with city directory search powered by Google Maps Geocoding API.
-* ⚡ **High-Concurrency Seat Reservation Engine**: Prevents double-bookings under peak traffic spikes using Redis distributed locks, atomic Lua/PostgreSQL RPC holds, and a 3-minute TTL release timer.
-* 🐇 **Asynchronous Queue & Promotion Worker**: Powered by RabbitMQ to process bookings asynchronously and automatically promote next-in-line FIFO users when seats are released.
-* 🎨 **Cinema Hall Provider Management**:
-  * **Film Catalog & Live Studio Poster Studio**: Upload custom movie posters (PNG, JPG, WEBP) or input image URLs, set release dates, default showtimes, producer credits, and preview real-time theatrical cards.
-  * **Draft & Publishing Controls**: Stage movies as drafts or submit legal exhibition licenses (CBFC certificates & distributor agreements) for public scheduling.
-  * **Interactive Auditorium & Screen Config**: Custom seat grids supporting standard, VIP, recliner, and accessible tiers.
-* 🎟️ **Instant Digital Ticket & QR Verification**: Dynamic ticket pass generation with cryptographically verifiable QR codes for on-site scanning.
-* 🌌 **Sleek Cyber-Cinema Aesthetics**: Ultra-responsive dark glassmorphism interface featuring WebGL fluid particle shaders (OGL), Lucide iconography, and reactive micro-interactions.
+| Component | Cloud Provider | URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Frontend Web App** | **Vercel** | [https://movie-hall-bice.vercel.app/](https://movie-hall-bice.vercel.app/) | ![Production](https://img.shields.io/badge/status-live-brightgreen?style=flat-square) |
+| **Backend REST API** | **Render** | [https://tixora-backend-w24j.onrender.com](https://tixora-backend-w24j.onrender.com) | ![Production](https://img.shields.io/badge/status-healthy-brightgreen?style=flat-square) |
+| **API Health & Probe** | **Render** | [https://tixora-backend-w24j.onrender.com/health](https://tixora-backend-w24j.onrender.com/health) | ![JSON Probe](https://img.shields.io/badge/probe-200%20OK-blue?style=flat-square) |
+| **Database & Auth** | **Supabase** | Cloud PostgreSQL 15 + RLS | ![Active](https://img.shields.io/badge/status-connected-success?style=flat-square) |
+
+---
+
+## 🌟 Key Platform Highlights
+
+### 🎟️ 1. Consumer Booking & Ticketing
+- **Live Seat Inventory & Atomic Holds**: Distributed locks with a 120–180 second hold countdown timer prevent double-booking during traffic surges.
+- **Instant QR Passes & Ticket Passes**: Cryptographic QR codes for ticket validation with seat, screen, and cinema hall verification.
+- **Automated Email Dispatch**: Instant confirmation emails dispatched to users upon ticket purchase with complete booking breakdown.
+- **Proximity-Based Discovery**: GPS location detection and Haversine distance calculations to find nearby cinema halls.
+
+### 🏢 2. Cinema Partner Console (Exhibitor Studio)
+- **Isolated Hall Film Management**: Exhibitors strictly manage movies, showtimes, and screens for their specific cinema hall.
+- **Seat Layout Studio**: Interactive seat map designer for Recliner Lounge, VIP Deluxe, Executive Premium, and Classic Stall tiers.
+- **Statutory Document Submission**: Secure upload of CBFC Exhibitor Licences, Theatrical Distribution Deeds, and Fire Safety NOCs for verification.
+
+### 🛡️ 3. Super Admin Root Console
+- **Master Root Access Key Challenge**: Guarded by master clearance key `TIX-098-245`. Without this key, all admin APIs reject requests with `401 INVALID_ROOT_KEY`.
+- **Zero Public Surface**: No admin links or shortcuts exist on public navigation bars. Direct entry requires navigation to `/admin` and passing the master key challenge.
+- **Compliance & Film Approval**: One-click verification of cinema compliance certificates and instant film authorization for public booking.
 
 ---
 
 ## 🏛️ System Architecture
 
 ```text
-                               +-------------------------------------+
-                               |           React 19 + Vite           |
-                               |  Tailwind CSS v4 & OGL Backgrounds  |
-                               +------------------+------------------+
-                                                  |
-                                                  | REST API (JWT / JSON)
-                                                  v
-                               +-------------------------------------+
-                               |         Express.js (Node.js)        |
-                               |  Rate Limiting, Multer, Zod Schema  |
-                               +----+--------------------+-----+-----+
-                                    |                    |     |
-              +---------------------+                    |     +-------------------------+
-              |                                          |                               |
-              v                                          v                               v
-    +-------------------+                      +-------------------+           +-------------------+
-    |    Redis Cache    |                      |   PostgreSQL /    |           |     RabbitMQ      |
-    |  - 180s Seat Lock |                      |     Supabase      |           | - Async Bookings  |
-    |  - City Geocodes  |                      | - Row-Level Sec.  |           | - Seat Hold Expiry|
-    |  - Rate Limits    |                      | - Atomic RPCs     |           | - FIFO Queue Prom.|
-    +-------------------+                      +-------------------+           +-------------------+
+                                +-------------------------------------+
+                                |      React 19 + Vite (Frontend)     |
+                                |  Tailwind CSS v4 & OGL Visuals      |
+                                +------------------+------------------+
+                                                   |
+                                                   | REST API (HTTPS / JSON / JWT)
+                                                   v
+                                +-------------------------------------+
+                                |      Express.js (tixora-backend)    |
+                                |  Helmet, CORS, Multer, Rate Limiting|
+                                +----+--------------------+-----+-----+
+                                     |                    |     |
+               +---------------------+                    |     +-------------------------+
+               |                                          |                               |
+               v                                          v                               v
+     +-------------------+                      +-------------------+           +-------------------+
+     |   Redis / Cache   |                      |    PostgreSQL     |           |     RabbitMQ      |
+     |  - Distributed TTL|                      |     (Supabase)    |           | - Async Bookings  |
+     |  - In-Memory Mock |                      | - Row Level Sec.  |           | - Seat Hold Expiry|
+     |    Fallback Engine|                      | - Atomic RPCs     |           | - Queue Promotion |
+     +-------------------+                      +-------------------+           +-------------------+
 ```
 
 ---
 
-## 🚀 Seat Hold & Booking Workflow
+## 🛠️ Local Development Setup
 
-```text
-USER SELECTION (Seats A1, A2)
-       │
-       ▼
-Express API (/api/v1/shows/:id/seats/hold)
-       ├──> Redis: Acquire distributed locks (`show:{id}:seat:{id}:hold`) with 180s TTL
-       ├──> Supabase: Execute atomic RPC `claim_show_seats`
-       └──> RabbitMQ: Enqueue `seat.hold.created`
-               │
-               ├──────────────────────────────────────────┐
-               │ (Completed within 3 mins)                │ (Expired / Abandoned)
-               ▼                                          ▼
-       Payment Confirmed                          SeatExpiryWorker
-               │                                          │
-       PostgreSQL `confirm_booking`               Release hold in DB & Redis
-               │                                          │
-       ShowSeat Status -> `BOOKED`                RabbitMQ `seat.queue.promote`
-               │                                          │
-       Digital Ticket Generated + QR Pass         QueuePromotionWorker
-                                                  Promotes next waiting customer!
-```
-
----
-
-## 💻 Tech Stack
-
-### Frontend
-* **Core**: [React 19](https://react.dev/), [Vite](https://vitejs.dev/), [React Router v7](https://reactrouter.com/)
-* **Styling**: [Tailwind CSS v4](https://tailwindcss.com/), Custom Neon Glassmorphism (`#03b5d3`, `#8b5cf6`, `#4edea3`)
-* **Visuals & Graphics**: [OGL](https://github.com/oframe/ogl) (WebGL shader animations), [Canvas Confetti](https://www.npmjs.com/package/canvas-confetti), [Lucide React](https://lucide.dev/)
-* **Client Data**: [Supabase JS Client](https://supabase.com/docs/reference/javascript)
-
-### Backend
-* **Runtime**: [Node.js](https://nodejs.org/) (v18+ / v24 tested), [Express.js](https://expressjs.com/)
-* **Database & Auth**: [Supabase](https://supabase.com/) (PostgreSQL 15+, RLS Policies, Stored Procedures/RPCs)
-* **Distributed Memory & Messaging**: [Redis](https://redis.io/) (ioredis), [RabbitMQ](https://www.rabbitmq.com/) (amqplib)
-* **File Uploads & Media**: [Multer](https://github.com/expressjs/multer) with local static serving and Supabase Storage integration
-* **Security & Utilities**: [Helmet](https://helmetjs.github.io/), CORS, [Zod](https://zod.dev/), [JSONWebToken](https://jwt.io/), [QRCode](https://www.npmjs.com/package/qrcode), Express Rate Limit
-
----
-
-## 📂 Project Structure
-
-```text
-Movie-Hall/
-├── Frontend/                           # React + Vite Client Application
-│   ├── src/
-│   │   ├── components/                 # UI components (HallFilmsManagementView, TicketPassModal, etc.)
-│   │   ├── pages/                      # Page views (Home, Movies, Theaters, Booking, Provider, Admin)
-│   │   ├── utils/                      # Utilities (location.js, proximity calculations)
-│   │   ├── api.js                      # Centralized API service & axios/fetch wrappers
-│   │   └── App.jsx                     # Router & root app state
-│   ├── public/                         # Public static assets
-│   ├── tailwind.config.js              # Theme and styling tokens
-│   └── vite.config.js                  # Vite server & API proxy rules
-│
-├── tixora-backend/                     # Express.js REST API & Queue Workers
-│   ├── scripts/                        # Database seeders (seed.js)
-│   ├── src/
-│   │   ├── config/                     # Redis, RabbitMQ, and Supabase connections
-│   │   ├── controllers/                # Request handlers
-│   │   ├── middleware/                 # Auth, RBAC, Multer upload, and error handling
-│   │   ├── routes/                     # REST routes (cinema, provider, movies, shows, bookings, location)
-│   │   ├── services/                   # Business logic (MovieService, GeoService, SeatHoldService)
-│   │   ├── workers/                    # RabbitMQ queue workers (SeatExpiry, QueuePromotion)
-│   │   └── app.js                      # Express configuration & middleware pipeline
-│   ├── supabase/migrations/            # PostgreSQL DDL migrations & stored procedures (001-020)
-│   ├── docker-compose.yml              # Local container setup (Redis & RabbitMQ)
-│   └── server.js                       # HTTP server entrypoint
-│
-└── README.md                           # Master Project Documentation
-```
-
----
-
-## 🛠️ Getting Started
+Follow these steps to run TIXORA on your local machine.
 
 ### 1. Prerequisites
-* [Node.js](https://nodejs.org/) (v18 or higher)
-* [Docker Desktop](https://www.docker.com/) (for Redis and RabbitMQ)
-* A [Supabase](https://supabase.com/) project (free tier works great)
+- **Node.js**: v18.0.0 or higher ([Download Node.js](https://nodejs.org/))
+- **Git**: Installed and configured
+- **Docker** *(Optional)*: For running local Redis & RabbitMQ instances (the server automatically uses built-in in-memory fallbacks if Docker is not running).
 
 ---
 
-### 2. Backend Setup
+### 2. Clone the Repository
 
-1. **Navigate to the backend directory and install dependencies**:
+```bash
+git clone https://github.com/Kobi1003/Movie-Hall.git
+cd Movie-Hall
+```
+
+---
+
+### 3. Backend Setup (`tixora-backend`)
+
+1. **Navigate to the backend folder**:
    ```bash
    cd tixora-backend
-   npm install
    ```
 
-2. **Start Redis and RabbitMQ via Docker**:
+2. **Install dependencies**:
    ```bash
-   docker compose up -d
+   npm install
    ```
-   * Redis running on: `localhost:6379`
-   * RabbitMQ running on: `localhost:5672` (Management UI: `http://localhost:15672`, user: `guest`, pass: `guest`)
 
 3. **Configure Environment Variables**:
-   Copy `.env.example` to `.env` and configure your credentials:
-   ```bash
-   cp .env.example .env
-   ```
-   Key variables:
+   Create a `.env` file in `tixora-backend/`:
    ```env
+   # Server Configuration
    PORT=5000
    NODE_ENV=development
-   FRONTEND_URL=http://localhost:5173
+   API_PREFIX=/api/v1
+   CORS_ORIGIN=http://localhost:5173,http://localhost:3000
 
-   # Supabase Configuration
+   # Supabase Database & Auth
    SUPABASE_URL=https://<your-project-id>.supabase.co
-   SUPABASE_PUBLISHABLE_KEY=<your-anon-key>
-   SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+   SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 
-   # Redis & RabbitMQ
-   REDIS_URL=redis://localhost:6379
-   RABBITMQ_URL=amqp://localhost:5672
+   # Authentication & Security
+   JWT_SECRET=your-32-char-random-jwt-secret-key-here
+   TIXORA_ROOT_ACCESS_KEY=TIX-098-245
 
-   # JWT Secret
-   JWT_SECRET=super_secret_jwt_key_here
+   # Seat Hold Durations (Seconds)
+   SEAT_HOLD_SECONDS=120
+   CUSTOMER_BOOKING_SECONDS=120
+   MAX_SEAT_SELECTION=10
 
-   # Google Maps Geocoding (Optional for enhanced reverse geocoding)
-   GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+   # Automated Ticketing Email Service (EmailJS)
+   EMAILJS_SERVICE_ID=your-emailjs-service-id
+   EMAILJS_TEMPLATE_ID=your-emailjs-template-id
+   EMAILJS_PUBLIC_KEY=your-emailjs-public-key
+   EMAILJS_PRIVATE_KEY=your-emailjs-private-key
    ```
 
-4. **Execute Database Migrations**:
-   Run the SQL scripts in `tixora-backend/supabase/migrations/` (from `001_profiles.sql` to `020_movie_default_start_time.sql`) in your Supabase SQL Editor.
-
-5. **Seed Initial Demo Data**:
+4. **Start the Backend Server**:
    ```bash
-   npm run seed
+   npm start
    ```
-
-6. **Start the API Server**:
-   ```bash
-   npm run dev
-   ```
-   The backend will be running at `http://localhost:5000/api/v1`.
+   * The API server will boot on `http://localhost:5000/api/v1`
+   * Health endpoint: `http://localhost:5000/health`
 
 ---
 
-### 3. Frontend Setup
+### 4. Frontend Setup (`Frontend`)
 
-1. **Open a new terminal, navigate to the frontend directory, and install dependencies**:
+1. **Open a new terminal window** and navigate to `Frontend`:
    ```bash
    cd Frontend
+   ```
+
+2. **Install dependencies**:
+   ```bash
    npm install
    ```
 
-2. **Set up Environment Variables**:
-   Create a `.env` file inside `Frontend/`:
+3. **Configure Environment Variables**:
+   Create a `.env` file in `Frontend/`:
    ```env
-   VITE_API_URL=http://localhost:5000/api/v1
-   VITE_SUPABASE_URL=https://<your-project-id>.supabase.co
-   VITE_SUPABASE_ANON_KEY=<your-anon-key>
+   VITE_API_URL=/api/v1
+   VITE_BACKEND_URL=http://localhost:5000
+   VITE_TIXORA_ROOT_ACCESS_KEY=TIX-098-245
    ```
 
-3. **Start the Vite Development Server**:
+4. **Start the Vite Development Server**:
    ```bash
    npm run dev
    ```
-   Open `http://localhost:5173` in your browser.
+   * Open **`http://localhost:5173`** in your browser.
 
 ---
 
-## 📡 API Overview
+## 🔐 Credentials & Access Reference
 
-| Method | Endpoint | Description | Auth Required |
-|---|---|---|---|
-| `GET` | `/health` | Server health & readiness probe | No |
-| `GET` | `/api/v1/movies` | List published movies | No |
-| `GET` | `/api/v1/cinemas` | List verified cinema halls (filterable by city/coords) | No |
-| `GET` | `/api/v1/cinemas/cities` | List unique cities with active cinema halls | No |
-| `GET` | `/api/v1/location/geocode` | Resolve address/coordinates using Google Maps Geocoding | No |
-| `POST` | `/api/v1/cinema/movies/upload-poster` | Upload custom movie poster image (Multer) | Partner / Admin |
-| `POST` | `/api/v1/cinema/movies` | Create a movie with poster, date, time, producer | Partner / Admin |
-| `POST` | `/api/v1/shows/:id/seats/hold` | Atomically lock selected seats for 180 seconds | User |
-| `POST` | `/api/v1/bookings` | Finalize ticket booking and generate QR pass | User |
+| Portal | URL Path | Credentials / Access Key | Role |
+| :--- | :--- | :--- | :--- |
+| **Consumer Portal** | `/discover` or `/book` | Create account or login with email/password | General Audience |
+| **Cinema Partner Studio** | `/partner/films` | Log in with cinema exhibitor account | Cinema Owner |
+| **Super Admin Console** | `/admin` | Root Access Key: `TIX-098-245` | Master Platform Admin |
 
 ---
 
-## 🧪 Testing
+## 📡 REST API Route Index
 
-To run the automated backend test suite (concurrency locks, TTL expiration, and queue promotion):
-```bash
-cd tixora-backend
-npm test
-```
+### Public Discovery & Movies
+- `GET  /health` — Service readiness and database connection probe
+- `GET  /api/v1/movies` — List all published theatrical titles
+- `GET  /api/v1/shows?movieId=:id` — Get showtimes, screen details, and available seat counts
+- `GET  /api/v1/shows/:id/seat-map` — Fetch sectioned seating layout (Recliner, VIP, Executive, Stall)
+- `GET  /api/v1/cinemas` — List verified cinema halls with geospatial distance ranking
 
-To run the frontend production build verification:
-```bash
-cd Frontend
-npm run build
-```
+### Seat Reservation & Bookings
+- `POST /api/v1/shows/:id/hold` — Acquire atomic distributed seat locks (120s TTL)
+- `POST /api/v1/bookings` — Create pending reservation
+- `POST /api/v1/payments/confirm` — Confirm payment, mark seats `BOOKED`, and dispatch ticket email
+- `GET  /api/v1/bookings/my` — Retrieve authenticated user's digital passes and QR codes
+
+### Exhibitor & Cinema Partner
+- `GET  /api/v1/cinema/movies` — List movies strictly registered to the authenticated exhibitor
+- `POST /api/v1/cinema/movies` — Register film with synopsis, duration, artwork, and formats
+- `POST /api/v1/cinema/movies/upload-poster` — Upload key art poster (Multer)
+- `POST /api/v1/cinema/documents` — Submit CBFC, Distribution, and NOC compliance certificates
+
+### Super Admin Operations
+- `POST /api/v1/admin/verify-root-key` — Verify master key (`TIX-098-245`) and receive signed admin token
+- `GET  /api/v1/admin/pending` — List pending cinemas, compliance files, and movie submissions
+- `POST /api/v1/admin/approve-movie/:id` — Approve and publish movie to public discovery
+
+---
+
+## 💻 Tech Stack Summary
+
+- **Frontend**: React 19, Vite, Tailwind CSS v4, Lucide React, Canvas Confetti, OGL (WebGL)
+- **Backend**: Node.js, Express.js, Supabase JS Client, Multer, Helmet, CORS, Zod, QR Code
+- **Database**: Cloud PostgreSQL 15 (Supabase), Row-Level Security, Database Stored Functions
+- **Email Service**: EmailJS REST API Integration
+- **Hosting**: Vercel (Frontend SPA) + Render (Node.js Web Service)
 
 ---
 
 ## 📄 License
-
 This project is licensed under the **ISC License**.
