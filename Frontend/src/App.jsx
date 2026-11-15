@@ -114,26 +114,8 @@ function SeatBookingWrapper({
 
 // ── Customer Guard (Restricts wallet to customers or guests) ──────────────────
 function CustomerGuard({ currentUser, onOpenAuth, children }) {
-  if (currentUser?.role === 'customer' || currentUser === null) {
-    return children;
-  }
-  return (
-    <div className="pt-28 pb-16 px-4 max-w-xl mx-auto text-center flex flex-col items-center gap-4">
-      <div className="w-16 h-16 rounded-2xl bg-[#8b5cf6]/20 border border-[#8b5cf6]/40 flex items-center justify-center text-[#d0bcff]">
-        <User className="w-8 h-8" />
-      </div>
-      <h2 className="text-2xl font-bold text-white">Customer Account Required</h2>
-      <p className="text-xs text-[#94a3b8] font-mono">
-        You are currently signed in as {currentUser.role === 'partner' ? 'Cinema Partner' : 'Admin'}. Switch to a customer account to view your personal ticket wallet.
-      </p>
-      <button
-        onClick={() => onOpenAuth({ role: 'customer', isSignUp: false })}
-        className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#a078ff] to-[#6d3bd7] text-white font-bold text-xs font-mono shadow-lg cursor-pointer"
-      >
-        Sign In as Customer
-      </button>
-    </div>
-  );
+  // Any logged-in user or guest who booked tickets can view their ticket wallet
+  return children;
 }
 
 // ── Partner Guard (Restricts partner studio to verified partners or admins) ──
@@ -533,8 +515,11 @@ export default function App() {
     // Only auto-redirect on login — don't override manual portal switches
     if (userData.role === 'admin') {
       navigate('/admin/console');
+    } else if (authModalConfig?.role === 'customer') {
+      // User signed in from Movie Viewer tab — go straight to customer catalog
+      navigate('/discover');
     } else if (userData.role === 'partner') {
-      // Only go to partner home if NOT already on a customer-facing page
+      // Cinema provider login
       if (!location.pathname.startsWith('/discover') && !location.pathname.startsWith('/book') && !location.pathname.startsWith('/my-bookings')) {
         navigate('/partner/shows');
       }
@@ -823,13 +808,8 @@ export default function App() {
           <div className="flex items-center gap-6 text-xs font-mono text-[#958ea0]">
             <button 
               onClick={() => {
-                if (currentUser?.role === 'partner') {
-                  navigate('/partner/shows');
-                } else if (currentUser?.role === 'admin') {
-                  navigate('/admin/console');
-                } else {
-                  navigate('/discover');
-                }
+                navigate('/discover');
+                if (setCurrentMode) setCurrentMode('customer');
               }} 
               className="hover:text-white cursor-pointer"
             >

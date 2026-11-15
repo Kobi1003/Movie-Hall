@@ -237,15 +237,11 @@ export default function Navbar({
         <div className="flex items-center gap-4 lg:gap-6">
           <button 
             onClick={() => { 
-              if (currentUser?.role === 'partner') {
-                navigateTo('/partner/films/new', 'add-edit-film');
-              } else if (currentUser?.role === 'admin') {
-                navigateTo('/admin/console', 'admin-console');
-              } else {
-                navigateTo('/discover', 'discover');
-              }
+              navigateTo('/discover', 'discover');
+              if (setCurrentMode) setCurrentMode('customer');
             }} 
             className="flex items-center gap-2.5 group text-left cursor-pointer focus:outline-none"
+            title="Tixora Cinema - Go to Movie Viewer Catalog"
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8b5cf6] via-[#a078ff] to-[#4cd7f6] p-[2px] shadow-[0_0_20px_rgba(139,92,246,0.5)] group-hover:scale-105 transition-transform">
               <div className="w-full h-full bg-[#0d0e12] rounded-[10px] flex items-center justify-center">
@@ -633,15 +629,14 @@ export default function Navbar({
                   </div>
                   </div>
 
-                  {currentUser.role === 'customer' && (
-                    <button
-                      onClick={() => { navigateTo('/my-bookings', 'my-bookings'); setProfileDropdownOpen(false); }}
-                      className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
-                    >
-                      <Ticket className="w-3.5 h-3.5 text-[#4cd7f6]" />
-                      My Tickets & QR Passes
-                    </button>
-                  )}
+                  {/* Available for any user who books tickets */}
+                  <button
+                    onClick={() => { navigateTo('/my-bookings', 'my-bookings'); setProfileDropdownOpen(false); }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"
+                  >
+                    <Ticket className="w-3.5 h-3.5 text-[#4cd7f6]" />
+                    My Tickets & QR Passes
+                  </button>
 
                   {currentUser.role === 'partner' && (
                     <>
@@ -683,8 +678,6 @@ export default function Navbar({
                     </>
                   )}
 
-
-
                   {/* Admin Root Console - only shown when signed in as admin */}
                   {currentUser.role === 'admin' && (
                     <button
@@ -696,12 +689,16 @@ export default function Navbar({
                     </button>
                   )}
 
+                  {/* Direct Portal Switcher inside Profile Menu */}
                   <button
                     onClick={() => {
-                      onOpenAuth({ 
-                        role: currentUser.role === 'partner' ? 'customer' : 'partner', 
-                        isSignUp: false 
-                      });
+                      if (currentUser.role === 'partner') {
+                        navigateTo('/discover', 'discover');
+                        if (setCurrentMode) setCurrentMode('customer');
+                      } else {
+                        navigateTo('/partner/shows', 'shows-pricing');
+                        if (setCurrentMode) setCurrentMode('partner');
+                      }
                       setProfileDropdownOpen(false);
                     }}
                     className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#cbc3d7] hover:bg-[#292a2e] hover:text-white flex items-center gap-2 cursor-pointer"

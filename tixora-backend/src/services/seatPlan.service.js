@@ -281,6 +281,42 @@ export class SeatPlanService {
     const screen = memoryStore.screens.get(screenId);
     if (screen) screen.capacity = capacity;
 
+    // Auto-schedule an active screening for this screen if active authorized movies exist
+    try {
+      const { ShowService } = await import('./show.service.js');
+      const { data: screenInfo } = await supabaseAdmin.from('screens').select('cinema_id').eq('id', screenId).maybeSingle();
+      const cinemaId = screenInfo?.cinema_id;
+      if (cinemaId) {
+        const { data: activeMovies } = await supabaseAdmin.from('movies').select('*').in('status', ['ACTIVE', 'AUTHORIZED']);
+        if (activeMovies && activeMovies.length > 0) {
+          const today = new Date().toISOString().slice(0, 10);
+          for (const movie of activeMovies) {
+            const { data: existingShow } = await supabaseAdmin.from('shows').select('id').eq('screen_id', screenId).eq('movie_id', movie.id).neq('status', 'CANCELLED').maybeSingle();
+            if (!existingShow) {
+              await ShowService.createShow(effectiveUserId, {
+                movieId: movie.id,
+                cinemaId,
+                screenId,
+                showDate: today,
+                startTime: '19:30:00',
+                endTime: '22:30:00',
+                language: movie.languages?.[0] || 'Hindi',
+                format: 'Standard 2D',
+                priceTiers: [
+                  { tierName: 'Standard', price: 250 },
+                  { tierName: 'Classic', price: 250 },
+                  { tierName: 'Premium', price: 400 },
+                  { tierName: 'Recliner', price: 650 }
+                ]
+              }).catch(e => logger.warn(`[publishSeatPlan] Auto-show create error for ${movie.title}: ${e.message}`));
+            }
+          }
+        }
+      }
+    } catch (e) {
+      logger.warn(`[publishSeatPlan] Auto-scheduling shows skipped: ${e.message}`);
+    }
+
     return { success: true, message: 'Seat plan published successfully', activeVersionId: versionId, capacity };
   }
 
