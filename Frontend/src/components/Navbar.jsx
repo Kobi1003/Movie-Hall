@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Film, 
@@ -297,7 +297,7 @@ export default function Navbar({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent text-sm text-white placeholder-[#958ea0] outline-none w-28 md:w-44 focus:w-56 transition-all"
             />
-            <span className="text-[10px] font-mono text-[#958ea0] bg-[#1e1f24] px-1.5 py-0.5 rounded border border-[#292a2e]">⌘K</span>
+            <span className="text-[10px] font-mono text-[#958ea0] bg-[#1e1f24] px-1.5 py-0.5 rounded border border-[#292a2e]">âŒ˜K</span>
           </div>
 
           {/* City Selector Dropdown */}
@@ -550,6 +550,17 @@ export default function Navbar({
 
 
 
+                  {/* Admin Root Console - only shown when signed in as admin */}
+                  {currentUser.role === 'admin' && (
+                    <button
+                      onClick={() => { navigateTo('/admin/console', 'admin-console'); setProfileDropdownOpen(false); }}
+                      className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-[#d0bcff] hover:bg-[#1e1329] hover:text-white flex items-center gap-2 cursor-pointer border border-[#d0bcff]/20 bg-[#d0bcff]/5"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#d0bcff]" />
+                      Admin Root Console
+                    </button>
+                  )}
+
                   <button
                     onClick={() => {
                       onOpenAuth({ 
@@ -579,6 +590,15 @@ export default function Navbar({
             </div>
           ) : (
             <div className="flex items-center gap-2">
+              {/* Platform Admin â€” hidden unless you know it's here; security enforced by root key at /admin/console */}
+              <button
+                onClick={() => navigate('/admin/console')}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#181c26] hover:bg-[#1e1329] border border-[#d0bcff]/20 text-[#d0bcff] font-bold text-xs font-mono transition-all cursor-pointer"
+                title="Platform Administration"
+              >
+                <Lock className="w-3.5 h-3.5 text-[#d0bcff]" />
+                <span>Admin</span>
+              </button>
               <button
                 onClick={() => onOpenAuth({ role: 'partner', isSignUp: false })}
                 className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#181c26] hover:bg-[#202534] border border-[#03b5d3]/30 text-[#4cd7f6] font-bold text-xs font-mono transition-all cursor-pointer"
