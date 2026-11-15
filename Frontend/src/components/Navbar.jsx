@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Film, 
@@ -8,19 +8,19 @@ import {
   Ticket, 
   ShieldCheck, 
   DollarSign, 
-  ChevronDown,
-  Building2,
-  LogIn,
-  LogOut,
-  Lock,
-  Plus,
-  CheckCheck,
-  CheckCircle2,
-  Clock,
-  Sparkles,
-  LayoutGrid,
-  LocateFixed,
-  Navigation
+  ChevronDown, 
+  Building2, 
+  LogIn, 
+  LogOut, 
+  Lock, 
+  Plus, 
+  CheckCheck, 
+  CheckCircle2, 
+  Clock, 
+  Sparkles, 
+  LayoutGrid, 
+  LocateFixed, 
+  Navigation 
 } from 'lucide-react';
 import { notificationsApi, cinemasApi } from '../api.js';
 import { requestBrowserLocation, findClosestCity } from '../utils/location.js';
@@ -28,6 +28,7 @@ import { requestBrowserLocation, findClosestCity } from '../utils/location.js';
 export default function Navbar({ 
   currentView, 
   setCurrentView, 
+  currentMode,
   setCurrentMode, 
   selectedCity, 
   setSelectedCity, 
@@ -51,10 +52,101 @@ export default function Navbar({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [portalDropdownOpen, setPortalDropdownOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const [locating, setLocating] = useState(false);
   const [dbCities, setDbCities] = useState([]);
+
+  // Close open dropdowns on route changes
+  useEffect(() => {
+    setPortalDropdownOpen(false);
+    setCityDropdownOpen(false);
+    setProfileDropdownOpen(false);
+    setNotificationsOpen(false);
+  }, [location.pathname]);
+
+  // Derive active portal dynamically from current route
+  const activePortal = useMemo(() => {
+    const p = location.pathname;
+    if (p.startsWith('/admin')) return 'admin';
+    if (p.startsWith('/partner')) return 'partner';
+    return 'customer';
+  }, [location.pathname]);
+
+  const portalConfig = useMemo(() => {
+    if (activePortal === 'admin') {
+      return {
+        id: 'admin',
+        label: 'ADMIN PANEL',
+        icon: <Lock className="w-3.5 h-3.5 text-[#d0bcff]" />,
+        badgeClass: 'bg-[#d0bcff]/15 border-[#d0bcff]/40 text-[#d0bcff] hover:bg-[#d0bcff]/25 shadow-[0_0_12px_rgba(208,188,255,0.25)]',
+        pulseClass: 'bg-[#d0bcff]'
+      };
+    }
+    if (activePortal === 'partner') {
+      return {
+        id: 'partner',
+        label: 'MOVIE HALL PROVIDER PORTAL',
+        icon: <Building2 className="w-3.5 h-3.5 text-[#4cd7f6]" />,
+        badgeClass: 'bg-[#03b5d3]/15 border-[#03b5d3]/30 text-[#4cd7f6] hover:bg-[#03b5d3]/25 shadow-[0_0_12px_rgba(3,181,211,0.25)]',
+        pulseClass: 'bg-[#03b5d3]'
+      };
+    }
+    return {
+      id: 'customer',
+      label: 'CUSTOMER PORTAL',
+      icon: <Ticket className="w-3.5 h-3.5 text-[#a078ff]" />,
+      badgeClass: 'bg-[#8b5cf6]/15 border-[#8b5cf6]/30 text-[#d0bcff] hover:bg-[#8b5cf6]/25 shadow-[0_0_12px_rgba(139,92,246,0.25)]',
+      pulseClass: 'bg-[#4edea3]'
+    };
+  }, [activePortal]);
+
+  const portalOptions = [
+    {
+      id: 'customer',
+      title: 'Customer Portal',
+      description: 'Discover movies, showtimes & book seats',
+      icon: <Ticket className="w-4 h-4 text-[#a078ff]" />,
+      iconBg: 'bg-[#8b5cf6]/20 border border-[#8b5cf6]/40 text-[#d0bcff]',
+      activeBg: 'bg-[#8b5cf6]/20',
+      activeBorder: 'border-[#8b5cf6]/50',
+      onClick: () => {
+        navigateTo('/discover', 'discover');
+        if (setCurrentMode) setCurrentMode('customer');
+      }
+    },
+    {
+      id: 'partner',
+      title: 'Movie Hall Provider Portal',
+      description: 'Upload films, seat layout studio & showtimes',
+      icon: <Building2 className="w-4 h-4 text-[#4cd7f6]" />,
+      iconBg: 'bg-[#03b5d3]/20 border border-[#03b5d3]/40 text-[#4cd7f6]',
+      activeBg: 'bg-[#03b5d3]/20',
+      activeBorder: 'border-[#03b5d3]/50',
+      onClick: () => {
+        if (currentUser?.role === 'partner') {
+          navigateTo('/partner/shows', 'shows-pricing');
+        } else {
+          navigateTo('/partner/films/new', 'add-edit-film');
+        }
+        if (setCurrentMode) setCurrentMode('partner');
+      }
+    },
+    {
+      id: 'admin',
+      title: 'Admin Panel',
+      description: 'CBFC verification, NOC & deed compliance',
+      icon: <Lock className="w-4 h-4 text-[#d0bcff]" />,
+      iconBg: 'bg-[#d0bcff]/20 border border-[#d0bcff]/40 text-[#d0bcff]',
+      activeBg: 'bg-[#d0bcff]/20',
+      activeBorder: 'border-[#d0bcff]/50',
+      onClick: () => {
+        navigateTo('/admin/console', 'admin-console');
+        if (setCurrentMode) setCurrentMode('admin');
+      }
+    }
+  ];
 
   // Fetch dynamic cities from backend
   useEffect(() => {
@@ -169,49 +261,71 @@ export default function Navbar({
             </div>
           </button>
 
-          {/* Role Indicator Badge */}
-          {currentUser ? (
-            <div className="hidden md:flex items-center">
-              {currentUser.role === 'customer' && (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#8b5cf6]/15 border border-[#8b5cf6]/30 text-[#d0bcff] text-[11px] font-mono font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#4edea3] animate-pulse"></span>
-                  CUSTOMER PORTAL
+          {/* Active Portal Indicator & Switcher Box */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setPortalDropdownOpen(!portalDropdownOpen);
+                if (cityDropdownOpen) setCityDropdownOpen(false);
+                if (notificationsOpen) setNotificationsOpen(false);
+                if (profileDropdownOpen) setProfileDropdownOpen(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono font-bold transition-all cursor-pointer ${portalConfig.badgeClass}`}
+              title="Current Portal (Click to switch)"
+            >
+              {portalConfig.icon}
+              <span className={`w-1.5 h-1.5 rounded-full ${portalConfig.pulseClass} animate-pulse`} />
+              <span className="tracking-wide">{portalConfig.label}</span>
+              <ChevronDown className="w-3 h-3 opacity-70 ml-0.5" />
+            </button>
+
+            {portalDropdownOpen && (
+              <div className="absolute left-0 mt-2 w-80 bg-[#181c26] border border-[#232938] rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-1.5 text-[10px] font-mono uppercase font-bold text-[#958ea0] tracking-wider border-b border-[#232938] mb-1 flex items-center justify-between">
+                  <span>Switch Portal</span>
+                  <span className="text-[9px] text-[#4edea3] font-bold">Active: {portalConfig.label}</span>
                 </div>
-              )}
-              {currentUser.role === 'partner' && (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#03b5d3]/15 border border-[#03b5d3]/30 text-[#4cd7f6] text-[11px] font-mono font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#03b5d3] animate-pulse"></span>
-                  CINEMA PARTNER CONSOLE
+                <div className="space-y-1">
+                  {portalOptions.map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => {
+                        opt.onClick();
+                        setPortalDropdownOpen(false);
+                      }}
+                      className={`w-full text-left p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        activePortal === opt.id
+                          ? `${opt.activeBg} border ${opt.activeBorder}`
+                          : 'hover:bg-[#202534] text-[#cbc3d7]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${opt.iconBg}`}>
+                          {opt.icon}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                            {opt.title}
+                          </div>
+                          <div className="text-[10px] text-[#94a3b8] font-mono leading-tight mt-0.5">
+                            {opt.description}
+                          </div>
+                        </div>
+                      </div>
+                      {activePortal === opt.id && (
+                        <CheckCircle2 className="w-4 h-4 text-[#4edea3] shrink-0" />
+                      )}
+                    </button>
+                  ))}
                 </div>
-              )}
-              {currentUser.role === 'admin' && (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#d0bcff]/15 border border-[#d0bcff]/40 text-[#d0bcff] text-[11px] font-mono font-bold">
-                  <Lock className="w-3 h-3 text-[#d0bcff]" />
-                  ADMIN ROOT CONSOLE
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="hidden md:flex items-center">
-              {location.pathname.startsWith('/admin') && (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#d0bcff]/15 border border-[#d0bcff]/40 text-[#d0bcff] text-[11px] font-mono font-bold">
-                  <Lock className="w-3 h-3 text-[#d0bcff]" />
-                  ADMIN GATEWAY
-                </div>
-              )}
-              {location.pathname.startsWith('/partner') && (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#03b5d3]/15 border border-[#03b5d3]/30 text-[#4cd7f6] text-[11px] font-mono font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#03b5d3] animate-pulse"></span>
-                  PARTNER GATEWAY
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Dynamic Navigation according to Role & URL Route */}
         <nav className="hidden lg:flex items-center gap-1">
-          {(!currentUser || currentUser.role === 'customer') && (
+          {activePortal === 'customer' && (
             <>
               <button
                 onClick={() => navigateTo('/discover', 'discover')}
@@ -252,7 +366,7 @@ export default function Navbar({
             </>
           )}
 
-          {currentUser?.role === 'partner' && (
+          {activePortal === 'partner' && (
             <>
               {[
                 { path: '/partner/films/new', view: 'add-edit-film', label: '1. Add / Edit Film', icon: Plus, iconClass: 'text-[#a078ff]' },
@@ -281,7 +395,23 @@ export default function Navbar({
             </>
           )}
 
-
+          {activePortal === 'admin' && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigateTo('/admin/console', 'admin-console')}
+                className="px-3.5 py-2 rounded-lg text-xs font-mono font-bold bg-[#292a2e] text-white shadow-sm border border-[#d0bcff]/40 flex items-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5 text-[#d0bcff]" />
+                Super Admin Compliance Clearance
+              </button>
+              <button
+                onClick={() => navigateTo('/discover', 'discover')}
+                className="px-3 py-1.5 rounded-lg text-xs font-mono text-[#94a3b8] hover:text-white hover:bg-[#1a1b20] transition-colors"
+              >
+                Exit to Customer View →
+              </button>
+            </div>
+          )}
         </nav>
 
         {/* Right Action Rig: Search, City, Notifications, Auth / Profile */}
@@ -303,7 +433,12 @@ export default function Navbar({
           {/* City Selector Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setCityDropdownOpen(!cityDropdownOpen)}
+              onClick={() => {
+                setCityDropdownOpen(!cityDropdownOpen);
+                if (portalDropdownOpen) setPortalDropdownOpen(false);
+                if (notificationsOpen) setNotificationsOpen(false);
+                if (profileDropdownOpen) setProfileDropdownOpen(false);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1b20] border border-[#232938] text-xs font-semibold text-[#e3e2e8] hover:bg-[#292a2e] transition-colors cursor-pointer"
             >
               <MapPin className={`w-3.5 h-3.5 ${userLocation ? 'text-[#4edea3]' : 'text-[#4cd7f6]'}`} />

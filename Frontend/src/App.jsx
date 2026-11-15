@@ -433,6 +433,18 @@ export default function App() {
     }
   };
 
+  // Keep currentMode synced with the active route
+  useEffect(() => {
+    const p = location.pathname;
+    if (p.startsWith('/admin')) {
+      setCurrentMode('admin');
+    } else if (p.startsWith('/partner')) {
+      setCurrentMode('partner');
+    } else {
+      setCurrentMode('customer');
+    }
+  }, [location.pathname]);
+
   // Sync mode with stored user role on initial load and keep cross-tab state in sync
   useEffect(() => {
     if (currentUser?.role) {
