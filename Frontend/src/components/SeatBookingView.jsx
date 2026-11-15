@@ -42,6 +42,7 @@ export default function SeatBookingView({
   const selectedTheatre = initialSlot?.theatre || movie?.theatres?.[0]?.name || movie?.theatre || 'PVR IMAX Grand Galleria';
   const selectedScreen = initialSlot?.screen || movie?.theatres?.[0]?.screenName || 'Screen 3 (Laser Macro XE)';
   const theatreObj = movie?.theatres?.find(t => t.name === selectedTheatre) || movie?.theatres?.[0];
+  const theatreAddress = initialSlot?.address || theatreObj?.address || theatreObj?.fullAddress || theatreObj?.area || '';
 
   // Day & Timing state
   const [selectedDay, setSelectedDay] = useState(initialSlot?.day || theatreObj?.showtimes?.[0]?.date || '');
@@ -199,6 +200,7 @@ export default function SeatBookingView({
                 showId: selectedShowId,
                 movie,
                 selectedTheatre,
+                theatreAddress,
                 selectedScreen,
                 selectedDay,
                 selectedShowtime,
@@ -470,6 +472,13 @@ export default function SeatBookingView({
                 <span className="text-[#494454]">•</span>
                 <span className="text-[#a078ff] font-bold">{selectedDay} • {selectedShowtime}</span>
               </div>
+              {theatreAddress && (
+                <div className="flex items-center gap-1.5 text-[11px] text-[#cbc3d7] font-mono mt-1">
+                  <MapPin className="w-3.5 h-3.5 text-[#4cd7f6] shrink-0" />
+                  <span className="text-[#958ea0] font-bold">Address: </span>
+                  <span className="text-white truncate">{theatreAddress}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1037,6 +1046,7 @@ export default function SeatBookingView({
                   showId: selectedShowId,
                   movie,
                   selectedTheatre,
+                  theatreAddress,
                   selectedScreen,
                   selectedDay,
                   selectedShowtime,

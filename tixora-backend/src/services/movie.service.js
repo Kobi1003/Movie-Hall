@@ -453,8 +453,8 @@ export class MovieService {
   }
 
   static async getPublicMovies({ search, language, genre, city, date, lat, lng, sortBy = 'closest' } = {}) {
-    // A film is ONLY shown on the customer side if and only if it has been approved by the platform admin (status = 'ACTIVE')
-    let query = supabaseAdmin.from('movies').select('*').eq('status', 'ACTIVE');
+    // Show all platform-approved/active/upcoming movies to customers
+    let query = supabaseAdmin.from('movies').select('*').in('status', ['ACTIVE', 'AUTHORIZED', 'APPROVED', 'UPCOMING']);
     if (search) query = query.or(`title.ilike.%${search}%,director_name.ilike.%${search}%`);
     if (language) query = query.contains('languages', [language]);
     if (genre) query = query.contains('genres', [genre]);
@@ -552,7 +552,9 @@ export class MovieService {
             cinemaId: s.cinema_id,
             name: s.cinemas?.cinema_name || 'Cinema',
             city: s.cinemas?.city || '',
-            area: s.cinemas?.address || '',
+            area: s.cinemas?.address || s.cinemas?.city || '',
+            address: s.cinemas?.address || s.cinemas?.city || '',
+            fullAddress: s.cinemas?.address || s.cinemas?.city || '',
             latitude: s.cinemas?.latitude != null ? Number(s.cinemas.latitude) : null,
             longitude: s.cinemas?.longitude != null ? Number(s.cinemas.longitude) : null,
             screenId: s.screen_id,
@@ -605,7 +607,7 @@ export class MovieService {
         userLat: lat,
         userLng: lng,
         userCity: city,
-        targetCity: city,
+        targetCity: null,
         sortBy
       });
 

@@ -38,6 +38,15 @@ const localToday = () => {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
 
+export const matchesCity = (theatre, navCity) => {
+  if (!navCity || navCity === 'All Locations' || navCity === 'All Locations / Metro') return true;
+  if (!theatre) return false;
+  const n = navCity.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+  const city = (theatre.city || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+  const addr = (theatre.address || theatre.fullAddress || theatre.area || '').toLowerCase();
+  return city.includes(n) || n.includes(city) || addr.includes(n);
+};
+
 export default function DiscoverView({
   currentUser,
   onSelectMovie,
@@ -118,11 +127,10 @@ export default function DiscoverView({
 
     const list = Array.from(cinemaMap.values());
     const allCities = !selectedCity || selectedCity === 'All Locations' || selectedCity === 'All Locations / Metro';
-    const cityFilter = (selectedCity || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
 
     const filtered = allCities
       ? list
-      : list.filter(theatre => (theatre.city || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim().includes(cityFilter));
+      : list.filter(theatre => matchesCity(theatre, selectedCity));
 
     // Sort according to city name with closest locations first!
     return filtered.sort((a, b) => {
@@ -201,7 +209,7 @@ export default function DiscoverView({
     }).then((data) => {
       if (cancelled || !Array.isArray(data)) return;
       const mapped = data
-        .filter(m => (m.status === 'ACTIVE' || m.status === 'AUTHORIZED') && m.status !== 'PENDING_REVIEW' && m.status !== 'DRAFT')
+        .filter(m => m.status !== 'REJECTED' && m.status !== 'DRAFT' && m.status !== 'PENDING_REVIEW' && m.status !== 'SUSPENDED')
         .map((m) => {
         const prices = (m.theatres || []).flatMap(t => (t.ticketPrices || []).map(p => Number(p.price))).filter(Number.isFinite);
         return {
@@ -224,33 +232,30 @@ export default function DiscoverView({
     return () => { cancelled = true; };
   }, [selectedCity, selectedDateFilter, userLocation, cinemaSortBy]);
 
-  // Filter movies
+  // Filter movies: All listed movies are visible to customers for browsing & booking
   const filteredMovies = catalog.filter(movie => {
     const isAllLocations = !selectedCity || selectedCity === 'All Locations' || selectedCity === 'All Locations / Metro';
-    const normalizedCity = (selectedCity || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
     const scheduledTheatres = (movie.theatres || []).filter(theatre => {
-      const matchesCity = isAllLocations || (theatre.city || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim().includes(normalizedCity);
+      const isCityMatch = matchesCity(theatre, selectedCity);
       const matchesCinema = selectedCinemaId === 'ALL' || theatre.cinemaId === selectedCinemaId;
       const hasSelectedDateShow = (theatre.showtimes || []).some(show =>
         !selectedDateFilter ? true : (show.date === selectedDateFilter || show.date >= localToday()));
-      return matchesCity && matchesCinema && hasSelectedDateShow;
+      return isCityMatch && matchesCinema && hasSelectedDateShow;
     });
-    // Keep approved/active catalogue entries discoverable before the provider
-    // publishes a show. Selecting a specific cinema remains show-only so a
-    // title is never attributed to a hall without an actual screening there.
-    const catalogueOnly = scheduledTheatres.length === 0;
-    if (catalogueOnly && selectedCinemaId !== 'ALL') return false;
+
+    // If a specific cinema hall is selected, restrict to movies playing at that hall
+    if (selectedCinemaId !== 'ALL' && scheduledTheatres.length === 0) return false;
 
     const q = (searchQuery || '').toLowerCase();
     const matchesQuery = !q ||
-      movie.title.toLowerCase().includes(q) ||
-      movie.genre.toLowerCase().includes(q) ||
-      movie.language.toLowerCase().includes(q) ||
-      scheduledTheatres.some(t => (t.name || '').toLowerCase().includes(q) || (t.area || '').toLowerCase().includes(q));
+      (movie.title || '').toLowerCase().includes(q) ||
+      (movie.genre || '').toLowerCase().includes(q) ||
+      (movie.language || '').toLowerCase().includes(q) ||
+      (movie.theatres || []).some(t => (t.name || '').toLowerCase().includes(q) || (t.address || t.area || '').toLowerCase().includes(q));
 
     const matchesFormat = selectedFormat === 'ALL' ||
-      movie.formats.some(format => format.toLowerCase().includes(selectedFormat.toLowerCase())) ||
-      scheduledTheatres.some(theatre => theatre.screenFormat?.toLowerCase().includes(selectedFormat.toLowerCase()));
+      (movie.formats || []).some(format => format.toLowerCase().includes(selectedFormat.toLowerCase())) ||
+      (movie.theatres || []).some(theatre => (theatre.screenFormat || '').toLowerCase().includes(selectedFormat.toLowerCase()));
 
     return matchesQuery && matchesFormat;
   });
@@ -515,9 +520,8 @@ export default function DiscoverView({
         ) : (
           <div className="space-y-8">
             {sortedMovies.map(movie => {
-              // Only show halls with a published screening for the selected city and date.
+              // Only show halls matching the navbar location and selected date
               const isAllLocations = !selectedCity || selectedCity === 'All Locations' || selectedCity === 'All Locations / Metro';
-              const normalizedCity = (selectedCity || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
               const allFutureTheatres = (movie.theatres || [])
                 .map(theatre => ({
                   ...theatre,
@@ -527,21 +531,15 @@ export default function DiscoverView({
                 .filter(theatre => theatre.showtimes.length > 0);
 
               const cityTheatres = isAllLocations
-                ? (movie.theatres || [])
-                : (movie.theatres?.filter(t => (t.city || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim().includes(normalizedCity)) || []);
+                ? allFutureTheatres
+                : allFutureTheatres.filter(t => matchesCity(t, selectedCity));
               const hallTheatres = selectedCinemaId === 'ALL'
                 ? cityTheatres
                 : cityTheatres.filter(theatre => theatre.cinemaId === selectedCinemaId);
-              const matchedTheatres = hallTheatres
-                .map(theatre => ({
-                  ...theatre,
-                  showtimes: (theatre.showtimes || []).filter(show =>
-                    !selectedDateFilter ? true : (show.date === selectedDateFilter || show.date >= localToday()))
-                }))
-                .filter(theatre => theatre.showtimes.length > 0);
+              const matchedTheatres = hallTheatres;
 
-              const hasCityMismatch = !isAllLocations && matchedTheatres.length === 0 && allFutureTheatres.length > 0;
-              const rawDisplayTheatres = matchedTheatres.length > 0 ? matchedTheatres : allFutureTheatres;
+              // Strictly select halls according to location selected on navbar
+              const rawDisplayTheatres = isAllLocations ? allFutureTheatres : matchedTheatres;
               const displayTheatres = [...rawDisplayTheatres].sort((a, b) => {
                 if (cinemaSortBy === 'closest' || cinemaSortBy === 'distance') {
                   if (a.distanceKm != null && b.distanceKm != null) {
@@ -554,6 +552,12 @@ export default function DiscoverView({
                 if (cityA !== cityB) return cityA.localeCompare(cityB);
                 return (a.name || '').localeCompare(b.name || '');
               });
+
+              // Check if screenings are available in other cities when none in selected location
+              const otherCities = !isAllLocations && matchedTheatres.length === 0
+                ? Array.from(new Set(allFutureTheatres.map(t => t.city).filter(Boolean)))
+                : [];
+
               const firstScreening = displayTheatres.flatMap(theatre =>
                 theatre.showtimes.map(show => ({ theatre, show })))[0];
 
@@ -638,7 +642,9 @@ export default function DiscoverView({
                           time: firstScreening.show.time,
                           showId: firstScreening.show.showId,
                           ticketPrices: firstScreening.theatre.ticketPrices,
-                          format: firstScreening.theatre.screenFormat || movie.format
+                          format: firstScreening.theatre.screenFormat || movie.format,
+                          address: firstScreening.theatre.address || firstScreening.theatre.fullAddress || firstScreening.theatre.area || `${firstScreening.theatre.name}, ${firstScreening.theatre.city}`,
+                          city: firstScreening.theatre.city
                         })}
                         className={`mt-5 w-full px-4 py-3 rounded-xl text-xs font-mono font-bold transition-all flex items-center justify-center gap-2 ${firstScreening
                           ? 'bg-gradient-to-r from-[#a078ff] to-[#6d3bd7] text-white shadow-[0_0_16px_rgba(160,120,255,0.35)] hover:brightness-110 cursor-pointer'
@@ -677,31 +683,31 @@ export default function DiscoverView({
 
                       {/* List of Theatres for this movie */}
                       <div className="space-y-4">
-                        {hasCityMismatch && (
+                        {otherCities.length > 0 && (
                           <div className="rounded-2xl border border-[#03b5d3]/40 bg-[#03b5d3]/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                                 <MapPin className="w-3.5 h-3.5 text-[#4cd7f6]" />
-                                Active screenings in {displayTheatres.map(t => t.city).filter(Boolean).join(', ')}
+                                No screenings currently in {selectedCity}. Currently showing in: {otherCities.join(', ')}
                               </span>
                               <p className="text-[11px] text-[#94a3b8] font-mono mt-0.5">
-                                Showing verified screenings from other locations. You can choose seats and book below:
+                                Switch location or view all locations to check showtimes and book tickets:
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => setSelectedCity('All Locations')}
-                              className="px-3 py-1.5 rounded-xl bg-[#03b5d3] text-[#001f26] font-mono text-[10px] font-bold shrink-0 hover:brightness-110 cursor-pointer"
+                              className="px-3.5 py-1.5 rounded-xl bg-[#03b5d3] text-[#001f26] font-mono text-xs font-bold shrink-0 hover:brightness-110 transition-all cursor-pointer shadow-md"
                             >
                               Show All Locations
                             </button>
                           </div>
                         )}
-                        {displayTheatres.length === 0 && (
+                        {displayTheatres.length === 0 && otherCities.length === 0 && (
                           <div className="rounded-2xl border border-[#232938] bg-[#0d0e12] p-5 space-y-2 text-center">
-                            <p className="text-xs font-bold text-white">No published screenings yet</p>
+                            <p className="text-xs font-bold text-white">Upcoming Release — Showtimes Opening Soon</p>
                             <p className="text-xs text-[#94a3b8] leading-relaxed">
-                              Upcoming screening dates and times will appear here after a cinema hall publishes its schedule.
+                              Upcoming screening dates and times will appear here as soon as a cinema hall publishes its schedule.
                             </p>
                           </div>
                         )}
@@ -719,9 +725,9 @@ export default function DiscoverView({
                                   <span className="text-base font-bold text-white hover:text-[#4cd7f6] transition-colors">
                                     {theatre.name}
                                   </span>
-                                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-[#1e1f24] text-[#cbc3d7] border border-[#292a2e] flex items-center gap-1">
+                                  <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-[#1e1f24] text-[#4cd7f6] border border-[#292a2e] flex items-center gap-1 font-semibold">
                                     <MapPin className="w-3 h-3 text-[#4cd7f6]" />
-                                    {theatre.area ? `${theatre.area}, ` : ''}{theatre.city || 'Cinema Complex'}
+                                    {theatre.city || 'Cinema Complex'}
                                   </span>
                                   {theatre.distanceText && (
                                     <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#4edea3]/15 text-[#4edea3] border border-[#4edea3]/30 shadow-[0_0_10px_rgba(78,222,163,0.15)]">
@@ -744,6 +750,15 @@ export default function DiscoverView({
                                     <ShieldCheck className="w-3.5 h-3.5 text-[#4edea3]" />
                                     Verified to Screen this Movie
                                   </span>
+                                </div>
+
+                                {/* Hall Full Street Address */}
+                                <div className="mt-2.5 flex items-start gap-2 bg-[#181c26]/90 p-2.5 rounded-xl border border-[#292a36]">
+                                  <MapPin className="w-4 h-4 text-[#4cd7f6] shrink-0 mt-0.5" />
+                                  <div className="text-xs font-mono text-[#e2e8f0] leading-relaxed">
+                                    <span className="text-[#958ea0] font-bold">Hall Address: </span>
+                                    <span className="text-white font-medium">{theatre.address || theatre.fullAddress || theatre.area || `${theatre.name}, ${theatre.city}`}</span>
+                                  </div>
                                 </div>
 
                                 <div className="flex items-center gap-3 text-xs font-mono text-[#94a3b8] mt-2 flex-wrap">
@@ -788,7 +803,9 @@ export default function DiscoverView({
                                           time: st.time,
                                           showId: st.showId,
                                           ticketPrices: theatre.ticketPrices,
-                                          format: theatre.screenFormat || movie.format
+                                          format: theatre.screenFormat || movie.format,
+                                          address: theatre.address || theatre.fullAddress || theatre.area || `${theatre.name}, ${theatre.city}`,
+                                          city: theatre.city
                                         })}
                                         className={`group/time relative px-3 py-2 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer flex flex-col items-center justify-center ${isAlmostFull
                                           ? 'bg-[#ffb4ab]/10 border-[#ffb4ab]/30 text-[#ffb4ab] hover:bg-[#ffb4ab]/20'

@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   ChevronRight,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  MapPin
 } from 'lucide-react';
 import { FOOD_MENU } from '../data/mockData';
 import { bookingsApi, paymentsApi, showsApi } from '../api.js';
@@ -44,6 +45,7 @@ export default function CheckoutModal({
 
   const showId = propShowId || checkoutData?.showId || movie?.showId;
   const theatreName = selectedTheatre || movie?.theatres?.[0]?.name || movie?.theatre || 'PVR IMAX Grand Galleria';
+  const theatreAddress = checkoutData?.theatreAddress || checkoutData?.theatre?.address || movie?.theatres?.[0]?.address || movie?.theatres?.[0]?.fullAddress || '';
   const screenName = selectedScreen || movie?.theatres?.[0]?.screenName || 'Screen 3 (Laser Macro XE)';
   const daySlot = selectedDay || 'Today (Fri 25 Sep)';
   const timeSlot = selectedShowtime || '07:30 PM';
@@ -478,6 +480,15 @@ export default function CheckoutModal({
               </div>
             </div>
           </div>
+          {theatreAddress && (
+            <div className="flex items-start gap-1.5 text-[10px] text-[#cbc3d7] pt-1.5 border-t border-[#1e2230]">
+              <MapPin className="w-3.5 h-3.5 text-[#4cd7f6] shrink-0 mt-0.5" />
+              <div className="truncate">
+                <span className="text-[#958ea0] font-bold">Hall Address: </span>
+                <span className="text-white font-medium">{theatreAddress}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* SECTION 1: ATTENDEE DETAILS (NAME, AGE) */}
