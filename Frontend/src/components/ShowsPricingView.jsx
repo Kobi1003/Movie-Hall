@@ -383,8 +383,16 @@ function DemoScreeningForm({ cinema, onCreated, onClose }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    moviesApi.listMine().then(rows => {
-      const active = (rows || []).filter(movie => ['ACTIVE', 'UPCOMING', 'AUTHORIZED'].includes(movie.status));
+    Promise.allSettled([moviesApi.listMine(), moviesApi.list()]).then(([resMine, resAll]) => {
+      const listA = resMine.status === 'fulfilled' && Array.isArray(resMine.value) ? resMine.value : [];
+      const listB = resAll.status === 'fulfilled' && Array.isArray(resAll.value) ? resAll.value : [];
+      const map = new Map();
+      [...listA, ...listB].forEach(m => {
+        if (['ACTIVE', 'UPCOMING', 'AUTHORIZED', 'APPROVED'].includes(m.status)) {
+          map.set(m.id, m);
+        }
+      });
+      const active = Array.from(map.values());
       setMovies(active);
       setMovieId(active[0]?.id || '');
     }).catch(err => setError(err.message || 'Could not load approved movies for this cinema hall.'));
@@ -518,13 +526,23 @@ export default function ShowsPricingView({ currentUser }) {
     setLoading(true);
     setLoadError('');
     try {
-      const [moviesResult, cinemaResult, showsResult] = await Promise.allSettled([
+      const [moviesResult, allCatalogResult, cinemaResult, showsResult] = await Promise.allSettled([
         moviesApi.listMine(),
+        moviesApi.list(),
         cinemasApi.mine(),
         showsApi.listMine(),
       ]);
-      const allMovies = moviesResult.status === 'fulfilled' && Array.isArray(moviesResult.value)
+      const myMoviesList = moviesResult.status === 'fulfilled' && Array.isArray(moviesResult.value)
         ? moviesResult.value : [];
+      const catalogMovies = allCatalogResult.status === 'fulfilled' && Array.isArray(allCatalogResult.value)
+        ? allCatalogResult.value.filter(m => ['ACTIVE', 'AUTHORIZED', 'APPROVED'].includes(m.status)) : [];
+      
+      const allMoviesMap = new Map();
+      myMoviesList.forEach(m => allMoviesMap.set(m.id, m));
+      catalogMovies.forEach(m => {
+        if (!allMoviesMap.has(m.id)) allMoviesMap.set(m.id, m);
+      });
+      const allMovies = Array.from(allMoviesMap.values());
       setProviderMovies(allMovies);
 
       let ownedCinemas = [];

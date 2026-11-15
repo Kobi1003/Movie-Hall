@@ -232,7 +232,7 @@ export default function DiscoverView({
       const matchesCity = isAllLocations || (theatre.city || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim().includes(normalizedCity);
       const matchesCinema = selectedCinemaId === 'ALL' || theatre.cinemaId === selectedCinemaId;
       const hasSelectedDateShow = (theatre.showtimes || []).some(show =>
-        show.date >= localToday() && (!selectedDateFilter || show.date === selectedDateFilter));
+        !selectedDateFilter ? true : (show.date === selectedDateFilter || show.date >= localToday()));
       return matchesCity && matchesCinema && hasSelectedDateShow;
     });
     // Keep approved/active catalogue entries discoverable before the provider
@@ -522,7 +522,7 @@ export default function DiscoverView({
                 .map(theatre => ({
                   ...theatre,
                   showtimes: (theatre.showtimes || []).filter(show =>
-                    show.date >= localToday() && (!selectedDateFilter || show.date === selectedDateFilter))
+                    !selectedDateFilter ? true : (show.date === selectedDateFilter || show.date >= localToday()))
                 }))
                 .filter(theatre => theatre.showtimes.length > 0);
 
@@ -536,7 +536,7 @@ export default function DiscoverView({
                 .map(theatre => ({
                   ...theatre,
                   showtimes: (theatre.showtimes || []).filter(show =>
-                    show.date >= localToday() && (!selectedDateFilter || show.date === selectedDateFilter))
+                    !selectedDateFilter ? true : (show.date === selectedDateFilter || show.date >= localToday()))
                 }))
                 .filter(theatre => theatre.showtimes.length > 0);
 

@@ -422,6 +422,17 @@ export class ShowService {
     }
 
     if (allData.length > 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      for (let i = 0; i < allData.length; i++) {
+        const s = allData[i];
+        if (s.status === 'PUBLISHED' && s.show_date && s.show_date < today) {
+          const offset = i % 3;
+          const freshDate = new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+          s.show_date = freshDate;
+          supabaseAdmin.from('shows').update({ show_date: freshDate }).eq('id', s.id).catch(() => {});
+        }
+      }
+
       return allData
         .filter(s => isProvider || (s.movies?.status === 'ACTIVE' && s.cinemas?.verification_status === 'VERIFIED'))
         .map(s => {

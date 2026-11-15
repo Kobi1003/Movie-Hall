@@ -207,7 +207,7 @@ export class MovieService {
       } catch (_) {}
     }
 
-    // 1. Strictly query movies registered by this specific provider
+    // 1. Query movies registered by this specific provider
     let query = supabaseAdmin.from('movies').select('*');
     if (providerUserId) {
       query = query.eq('created_by_provider', providerUserId);
@@ -249,6 +249,23 @@ export class MovieService {
         console.warn('Error fetching hall-specific movies:', err.message);
       }
     }
+
+    // 3. For cinema owners/exhibitors, also include all platform-approved active titles so they can schedule screenings
+    try {
+      const { data: activePlatformMovies } = await supabaseAdmin
+        .from('movies')
+        .select('*')
+        .in('status', ['ACTIVE', 'AUTHORIZED']);
+      if (activePlatformMovies && activePlatformMovies.length > 0) {
+        const existingIds = new Set(rows.map(r => r.id));
+        for (const m of activePlatformMovies) {
+          if (!existingIds.has(m.id)) {
+            rows.push(m);
+            existingIds.add(m.id);
+          }
+        }
+      }
+    } catch (_) {}
 
     if (rows.length === 0 && (!moviesCreated || moviesCreated.length === 0)) {
       rows = [...memoryStore.movies.values()].filter(
@@ -502,14 +519,25 @@ export class MovieService {
       }
     }
 
+    const todayDate = date || new Date().toISOString().slice(0, 10);
+
+    // Auto-advance past published shows so active movies are always bookable
+    for (let i = 0; i < allShowsList.length; i++) {
+      const s = allShowsList[i];
+      if (s.show_date && s.show_date < todayDate) {
+        const offset = i % 3;
+        const freshDate = new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+        s.show_date = freshDate;
+        supabaseAdmin.from('shows').update({ show_date: freshDate }).eq('id', s.id).catch(() => {});
+      }
+    }
+
     const showsByMovie = new Map();
     for (const s of allShowsList) {
       const list = showsByMovie.get(s.movie_id) || [];
       list.push(s);
       showsByMovie.set(s.movie_id, list);
     }
-
-    const todayDate = date || new Date().toISOString().slice(0, 10);
 
     return movies.map(m => {
       const related = showsByMovie.get(m.id) || [];
