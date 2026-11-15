@@ -512,22 +512,15 @@ export default function App() {
   const handleAuthSuccess = async (userData) => {
     setCurrentUser(userData);
     setUserBookings([]);
-    // Only auto-redirect on login — don't override manual portal switches
+    // STRICT redirect — always based on actual DB role, unconditional
     if (userData.role === 'admin') {
       navigate('/admin/console');
-    } else if (authModalConfig?.role === 'customer') {
-      // User signed in from Movie Viewer tab — go straight to customer catalog
-      navigate('/discover');
     } else if (userData.role === 'partner') {
-      // Cinema provider login
-      if (!location.pathname.startsWith('/discover') && !location.pathname.startsWith('/book') && !location.pathname.startsWith('/my-bookings')) {
-        navigate('/partner/shows');
-      }
+      // Cinema provider always lands on Add Film (Step 1 of partner workflow)
+      navigate('/partner/films/new');
     } else {
-      // customer
-      if (!location.pathname.startsWith('/book')) {
-        navigate('/discover');
-      }
+      // Customer always goes to movie catalog
+      navigate('/discover');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
