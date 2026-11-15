@@ -179,15 +179,15 @@ function PartnerGuard({ authReady, currentUser, onOpenAuth, navigate, children }
   );
 }
 
-// ── Admin Guard (Guarded strictly by Tixora Root Access Key: TIX-098-245) ─────────────
+// ── Admin Guard (Guarded by Platform Super Admin Password) ──────────────────
 function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children }) {
   const [rootKeyInput, setRootKeyInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(() => {
+    const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('tixora_root_access_key') : null;
     return (
-      typeof sessionStorage !== 'undefined' &&
-      sessionStorage.getItem('tixora_root_access_key') === 'TIX-098-245' &&
+      Boolean(saved) &&
       currentUser?.role === 'admin'
     );
   });
@@ -196,7 +196,7 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
     if (e) e.preventDefault();
     const key = rootKeyInput.trim();
     if (!key) {
-      setErrorMsg('Please enter the Tixora Root Access Key.');
+      setErrorMsg('Please enter the Admin Password.');
       return;
     }
     setIsVerifying(true);
@@ -216,7 +216,7 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
         throw new Error(res?.message || 'Verification failed');
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Invalid Tixora Root Access Key. Access Denied.');
+      setErrorMsg(err.message || 'Invalid Admin Password. Access Denied.');
     } finally {
       setIsVerifying(false);
     }
@@ -235,7 +235,7 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
     return <div className="pt-32 pb-20 px-4 text-center text-sm text-[#94a3b8]">Checking security credentials…</div>;
   }
 
-  // If unlocked with valid Root Access Key and authenticated as admin, show AdminRootConsole
+  // If unlocked with valid Admin credentials, show AdminRootConsole
   if (isUnlocked && currentUser?.role === 'admin') {
     return (
       <div className="relative">
@@ -243,7 +243,7 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#4edea3] animate-pulse"></span>
             <span className="text-[11px] font-mono text-[#d0bcff] font-bold tracking-wider">
-              ROOT CLEARANCE ACTIVE • KEY: TIX-098-245
+              SUPER ADMIN CLEARANCE ACTIVE
             </span>
           </div>
           <button
@@ -259,7 +259,7 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
     );
   }
 
-  // Otherwise, display Root Access Key Challenge
+  // Otherwise, display Admin Password Challenge
   return (
     <div className="pt-32 pb-20 px-4 max-w-md mx-auto text-center flex flex-col items-center gap-6">
       <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-[#3b122d] to-[#1e1329] border border-[#ffb4ab]/40 flex items-center justify-center text-[#ffb4ab] shadow-[0_0_35px_rgba(255,180,171,0.25)]">
@@ -270,16 +270,16 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
         <span className="text-[10px] font-mono font-bold px-3 py-1 rounded-full bg-[#ffb4ab]/15 text-[#ffb4ab] border border-[#ffb4ab]/30 uppercase tracking-widest">
           High-Security Platform Console
         </span>
-        <h2 className="text-2xl font-black text-white mt-3">Root Access Key Required</h2>
+        <h2 className="text-2xl font-black text-white mt-3">Admin Password Required</h2>
         <p className="text-xs text-[#94a3b8] font-mono mt-2 leading-relaxed">
-          The Admin Console is guarded by master platform authorization. Enter your assigned <strong className="text-[#d0bcff]">Tixora Root Access Key</strong> to unlock the console.
+          The Admin Console is guarded by master platform authorization. Enter the <strong className="text-[#d0bcff]">Admin Password</strong> to unlock the console.
         </p>
       </div>
 
       <form onSubmit={handleVerify} className="w-full space-y-3 bg-[#11131a] p-5 rounded-2xl border border-[#232938] text-left">
         <div>
           <label className="block text-[11px] font-mono uppercase text-[#94a3b8] mb-1.5 font-bold">
-            Tixora Root Access Key
+            Admin Password
           </label>
           <input
             type="password"
@@ -289,7 +289,7 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
               setRootKeyInput(e.target.value);
               setErrorMsg('');
             }}
-            placeholder="e.g. TIX-098-245"
+            placeholder="Enter Admin Password"
             className="w-full px-3.5 py-2.5 rounded-xl bg-[#08090d] border border-[#232938] text-white font-mono text-sm tracking-wider focus:border-[#a078ff] focus:ring-1 focus:ring-[#a078ff] outline-none transition-all placeholder:text-[#494454]"
           />
         </div>
@@ -307,17 +307,17 @@ function AdminGuard({ authReady, currentUser, setCurrentUser, navigate, children
           className="w-full py-3 rounded-xl bg-gradient-to-r from-[#a078ff] to-[#6d3bd7] text-white font-bold text-xs font-mono shadow-[0_0_20px_rgba(160,120,255,0.4)] hover:brightness-110 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {isVerifying ? (
-            <span>Verifying Root Clearance…</span>
+            <span>Verifying Admin Clearance…</span>
           ) : (
             <>
               <ShieldCheck className="w-4 h-4" />
-              <span>Verify Root Access Key</span>
+              <span>Verify Admin Password</span>
             </>
           )}
         </button>
 
         <p className="text-[10px] text-center text-[#64748b] font-mono pt-1">
-          Root access keys are confidential and configured in project environment variables.
+          Authorized personnel only. All access attempts are monitored and logged.
         </p>
       </form>
 
