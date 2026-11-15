@@ -453,13 +453,16 @@ export class MovieService {
   }
 
   static async getPublicMovies({ search, language, genre, city, date, lat, lng, sortBy = 'closest' } = {}) {
-    // Show all platform-approved/active/upcoming movies to customers
-    let query = supabaseAdmin.from('movies').select('*').in('status', ['ACTIVE', 'AUTHORIZED', 'APPROVED', 'UPCOMING']);
+    // Show all platform-approved/active movies to customers
+    let query = supabaseAdmin.from('movies').select('*').eq('status', 'ACTIVE');
     if (search) query = query.or(`title.ilike.%${search}%,director_name.ilike.%${search}%`);
     if (language) query = query.contains('languages', [language]);
     if (genre) query = query.contains('genres', [genre]);
     const { data, error: movieError } = await query;
-    if (movieError) throw new AppError('Could not load movies from the database', 503, 'DATABASE_UNAVAILABLE');
+    if (movieError) {
+      console.error('[getPublicMovies] Supabase movie query error:', movieError);
+      throw new AppError(`Could not load movies from the database: ${movieError.message || movieError.details || JSON.stringify(movieError)}`, 503, 'DATABASE_UNAVAILABLE');
+    }
     const rawMovies = data || [];
     // Deduplicate movies by normalized title to prevent identical movie entries
     const seenTitles = new Set();
