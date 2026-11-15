@@ -445,25 +445,19 @@ export default function App() {
     }
   }, [location.pathname]);
 
-  // Sync mode with stored user role on initial load and keep cross-tab state in sync
-  useEffect(() => {
-    if (currentUser?.role) {
-      setCurrentMode(currentUser.role);
-    }
-  }, []);
-
+  // Keep cross-tab state in sync (do NOT force mode from role — route is the source of truth)
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'tixora_user' || e.key === 'tixora_token') {
         const stored = getStoredUser();
         setCurrentUser(stored);
-        if (stored?.role) setCurrentMode(stored.role);
+        // Do NOT override currentMode here — the route-based useEffect owns that
       }
     };
     const handleCustomAuthChange = (e) => {
       if (e.detail) {
         setCurrentUser(e.detail);
-        if (e.detail.role) setCurrentMode(e.detail.role);
+        // Do NOT override currentMode here — the route-based useEffect owns that
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -492,7 +486,7 @@ export default function App() {
       };
       setStoredUser(restoredUser);
       setCurrentUser(restoredUser);
-      setCurrentMode(role);
+      // Do NOT call setCurrentMode here — let the route-based useEffect own currentMode
     }).catch(() => {
       if (cancelled) return;
       setAuthToken(null);
@@ -536,13 +530,19 @@ export default function App() {
   const handleAuthSuccess = async (userData) => {
     setCurrentUser(userData);
     setUserBookings([]);
-    setCurrentMode(userData.role);
-    if (userData.role === 'partner') {
-      navigate('/partner/shows');
-    } else if (userData.role === 'admin') {
+    // Only auto-redirect on login — don't override manual portal switches
+    if (userData.role === 'admin') {
       navigate('/admin/console');
-    } else if (!location.pathname.startsWith('/book')) {
-      navigate('/discover');
+    } else if (userData.role === 'partner') {
+      // Only go to partner home if NOT already on a customer-facing page
+      if (!location.pathname.startsWith('/discover') && !location.pathname.startsWith('/book') && !location.pathname.startsWith('/my-bookings')) {
+        navigate('/partner/shows');
+      }
+    } else {
+      // customer
+      if (!location.pathname.startsWith('/book')) {
+        navigate('/discover');
+      }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
