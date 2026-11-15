@@ -5,10 +5,9 @@ import {
   CheckCircle2, XCircle, AlertCircle, AlertTriangle, ChevronDown,
   ChevronUp, Lock, Unlock, CircleDot, Ban, Check, RotateCcw, X,
   BadgeCheck, MapPin, Activity, Database, RefreshCw,
-  FileCheck, FileText, ExternalLink, Award, Sparkles, Filter, DollarSign
+  FileCheck, FileText, ExternalLink, Award, Sparkles, Filter
 } from "lucide-react";
 import { loginSuperAdmin, adminApi, showsApi, getStoredUser } from "../api.js";
-import SettlementsView from "./SettlementsView";
 
 const ADMIN_PROVIDERS_INIT = [
   { providerId: "PROV-HP-001", providerName: "Rajesh Kumar", companyName: "Rajesh Cinemas & Entertainment Pvt. Ltd.", email: "admin@rajeshcinemas.io", phone: "+91 98201 49811", gstin: "27AABCR1234P1ZV", registrationId: "U92100MH2019PTC321447", city: "Mumbai (MMR)", hallCount: 2, verifiedHalls: 1, pendingHalls: 1, permissionStatus: "ACTIVE", joinedDate: "2024-03-01", lastActivity: "19 Sep 2026", halls: [{ hallId: "HALL-P001", name: "PVR IMAX Grand Galleria", status: "VERIFIED", screens: 3 }, { hallId: "HALL-P002", name: "INOX Megaplex BKC", status: "PENDING_VERIFICATION", screens: 4 }] },
@@ -1795,13 +1794,6 @@ export default function AdminRootConsole({ currentUser }) {
             color: "#d0bcff",
             desc: "Provider, user, and movie records"
           },
-          {
-            id: "settlements",
-            label: "Settlements & Escrow",
-            Icon: DollarSign,
-            color: "#4edea3",
-            desc: "Smart escrow disbursement matrix & ledgers"
-          },
         ].map(tab => (
           <button
             key={tab.id}
@@ -1843,7 +1835,6 @@ export default function AdminRootConsole({ currentUser }) {
       {activeTab === "shows" && <ShowsOverviewTab />}
       {activeTab === "providers" && <ProviderManagementTab />}
       {activeTab === "database" && <DatabaseTab />}
-      {activeTab === "settlements" && <SettlementsView />}
     </div>
   );
 }
