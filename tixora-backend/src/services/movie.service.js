@@ -570,7 +570,8 @@ export class MovieService {
         const offset = i % 3;
         const freshDate = new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
         s.show_date = freshDate;
-        supabaseAdmin.from('shows').update({ show_date: freshDate }).eq('id', s.id).catch(() => {});
+        // fire-and-forget date advance (supabase v2 needs await)
+        (async () => { try { await supabaseAdmin.from('shows').update({ show_date: freshDate }).eq('id', s.id); } catch (_) {} })();
       }
     }
 
