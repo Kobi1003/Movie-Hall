@@ -425,6 +425,7 @@ export class ShowService {
       }
     }
 
+    const allData = [...(dbData || [])];
     const existingIds = new Set(allData.map(s => s.id));
 
     // Also include memoryStore shows

@@ -55,7 +55,7 @@ router.get('/cinema/shows', authenticateUser, requireExhibitor(), async (req, re
           }
         }
       }
-    } catch (_) {}
+    } catch (_) { }
     shows = await ShowService.attachPerformanceMetrics(shows);
     return ApiResponse.success(res, shows);
   } catch (err) {

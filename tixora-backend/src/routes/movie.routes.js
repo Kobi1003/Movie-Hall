@@ -14,9 +14,7 @@ router.get('/movies', async (req, res, next) => {
     const movies = await MovieService.getPublicMovies({ search, language, genre, city, date, lat, lng, sortBy });
     return ApiResponse.success(res, movies);
   } catch (err) {
-    // Surface full error message for debugging (temporary)
-    console.error('[GET /movies] ERROR:', err?.message, err?.stack);
-    return res.status(500).json({ success: false, error: { code: 'MOVIES_ERROR', message: err?.message || 'Unknown error', stack: err?.stack?.split('\n').slice(0, 5) } });
+    next(err);
   }
 });
 
