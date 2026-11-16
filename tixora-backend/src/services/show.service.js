@@ -382,21 +382,49 @@ export class ShowService {
   }
 
   static async getPublicShows({ movieId, cinemaId, date, format, status, isProvider = false }) {
-    let query = supabaseAdmin
-      .from('shows')
-      .select('*, movies(title, status), cinemas(cinema_name, city, verification_status, is_active), screens(screen_name), show_seats(status, price, category_name)');
-    if (status) {
-      query = query.eq('status', status);
-    } else if ((movieId || cinemaId) && !isProvider) {
-      query = query.eq('status', SHOW_STATUS.PUBLISHED);
-    }
-    if (movieId) query = query.eq('movie_id', movieId);
-    if (cinemaId) query = query.eq('cinema_id', cinemaId);
-    if (date) query = query.eq('show_date', date);
-    if (format) query = query.eq('format', format);
+    // Build base query without show_seats join (may fail if FK not in schema cache)
+    const buildQuery = (withSeats) => {
+      const sel = withSeats
+        ? '*, movies(title, status), cinemas(cinema_name, city, verification_status, is_active), screens(screen_name), show_seats(status, price, category_name)'
+        : '*, movies(title, status), cinemas(cinema_name, city, verification_status, is_active), screens(screen_name)';
+      let q = supabaseAdmin.from('shows').select(sel);
+      if (status) {
+        q = q.eq('status', status);
+      } else if ((movieId || cinemaId) && !isProvider) {
+        q = q.eq('status', SHOW_STATUS.PUBLISHED);
+      }
+      if (movieId) q = q.eq('movie_id', movieId);
+      if (cinemaId) q = q.eq('cinema_id', cinemaId);
+      if (date) q = q.eq('show_date', date);
+      if (format) q = q.eq('format', format);
+      return q;
+    };
 
-    const { data: dbData } = await query;
-    const allData = [...(dbData || [])];
+    let dbData = null;
+    try {
+      const { data, error: q1err } = await buildQuery(true);
+      if (q1err) throw q1err;
+      dbData = data;
+    } catch (joinErr) {
+      console.warn('[getPublicShows] show_seats join failed, falling back:', joinErr?.message);
+      const { data: fallbackData } = await buildQuery(false);
+      dbData = fallbackData || [];
+      // Attach show_seats separately
+      if (dbData.length > 0) {
+        const showIds = dbData.map(s => s.id);
+        const { data: seatRows } = await supabaseAdmin
+          .from('show_seats')
+          .select('show_id, status, price, category_name')
+          .in('show_id', showIds);
+        const seatsByShow = new Map();
+        for (const sr of (seatRows || [])) {
+          if (!seatsByShow.has(sr.show_id)) seatsByShow.set(sr.show_id, []);
+          seatsByShow.get(sr.show_id).push(sr);
+        }
+        dbData = dbData.map(s => ({ ...s, show_seats: seatsByShow.get(s.id) || [] }));
+      }
+    }
+
     const existingIds = new Set(allData.map(s => s.id));
 
     // Also include memoryStore shows

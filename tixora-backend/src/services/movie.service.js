@@ -499,11 +499,41 @@ export class MovieService {
       }
     }
 
-    const { data: dbShows } = await supabaseAdmin
-      .from('shows')
-      .select('*, cinemas(id, cinema_name, city, address, latitude, longitude, verification_status), screens(id, screen_name, audio_format, supported_formats), show_seats(category_name, price, status)')
-      .eq('status', 'PUBLISHED')
-      .order('show_date', { ascending: true });
+    // Fetch published shows — try with show_seats join first, fall back without it
+    let dbShows = null;
+    try {
+      const { data, error: showsErr } = await supabaseAdmin
+        .from('shows')
+        .select('*, cinemas(id, cinema_name, city, address, latitude, longitude, verification_status), screens(id, screen_name, audio_format, supported_formats), show_seats(category_name, price, status)')
+        .eq('status', 'PUBLISHED')
+        .order('show_date', { ascending: true });
+      if (showsErr) throw showsErr;
+      dbShows = data;
+    } catch (joinErr) {
+      // show_seats join may fail if FK is not registered in PostgREST schema cache
+      // Fall back: fetch shows without seat join, then fetch seats separately
+      console.warn('[getPublicMovies] show_seats join failed, falling back to separate seat query:', joinErr?.message);
+      const { data: showsData } = await supabaseAdmin
+        .from('shows')
+        .select('*, cinemas(id, cinema_name, city, address, latitude, longitude, verification_status), screens(id, screen_name, audio_format, supported_formats)')
+        .eq('status', 'PUBLISHED')
+        .order('show_date', { ascending: true });
+      dbShows = showsData || [];
+      // Attach show_seats separately
+      if (dbShows.length > 0) {
+        const showIds = dbShows.map(s => s.id);
+        const { data: seatRows } = await supabaseAdmin
+          .from('show_seats')
+          .select('show_id, category_name, price, status')
+          .in('show_id', showIds);
+        const seatsByShow = new Map();
+        for (const sr of (seatRows || [])) {
+          if (!seatsByShow.has(sr.show_id)) seatsByShow.set(sr.show_id, []);
+          seatsByShow.get(sr.show_id).push(sr);
+        }
+        dbShows = dbShows.map(s => ({ ...s, show_seats: seatsByShow.get(s.id) || [] }));
+      }
+    }
 
     const allShowsList = [...(dbShows || [])];
     const existingShowIds = new Set(allShowsList.map(s => s.id));
