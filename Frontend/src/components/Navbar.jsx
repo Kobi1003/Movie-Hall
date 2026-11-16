@@ -231,7 +231,7 @@ export default function Navbar({
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-[#121317]/90 backdrop-blur-xl border-b border-[#232938] shadow-[0_4px_24px_rgba(0,0,0,0.7)] transition-all">
-      <div className="max-w-7xl mx-auto h-20 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+      <div className="max-w-7xl ml-0 mr-auto h-20 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
         
         {/* Brand Logo & Active Platform Tag */}
         <div className="flex items-center gap-4 lg:gap-6">
