@@ -453,12 +453,14 @@ export class MovieService {
   }
 
   static async getPublicMovies({ search, language, genre, city, date, lat, lng, sortBy = 'closest' } = {}) {
+    console.log('[getPublicMovies] START', { search, language, genre, city, date });
     // Show all platform-approved/active movies to customers
     let query = supabaseAdmin.from('movies').select('*').eq('status', 'ACTIVE');
     if (search) query = query.or(`title.ilike.%${search}%,director_name.ilike.%${search}%`);
     if (language) query = query.contains('languages', [language]);
     if (genre) query = query.contains('genres', [genre]);
     const { data, error: movieError } = await query;
+    console.log('[getPublicMovies] movies fetched:', data?.length, 'error:', movieError?.message);
     if (movieError) {
       console.error('[getPublicMovies] Supabase movie query error:', movieError);
       throw new AppError(`Could not load movies from the database: ${movieError.message || movieError.details || JSON.stringify(movieError)}`, 503, 'DATABASE_UNAVAILABLE');
@@ -486,18 +488,25 @@ export class MovieService {
     // Fetch document counts and types per movie for certification display
     const movieIds = movies.map(m => m.id);
     let docMap = new Map();
+    console.log('[getPublicMovies] fetching docs for', movieIds.length, 'movies');
     if (movieIds.length) {
-      const { data: docs } = await supabaseAdmin.from('movie_documents').select('movie_id, document_type, filename, status, created_at').in('movie_id', movieIds);
-      for (const d of (docs || [])) {
-        if (!docMap.has(d.movie_id)) docMap.set(d.movie_id, []);
-        docMap.get(d.movie_id).push({
-          type: d.document_type,
-          filename: d.filename,
-          status: d.status,
-          createdAt: d.created_at
-        });
+      try {
+        const { data: docs, error: docErr } = await supabaseAdmin.from('movie_documents').select('movie_id, document_type, filename, status, created_at').in('movie_id', movieIds);
+        if (docErr) console.warn('[getPublicMovies] movie_documents error (non-fatal):', docErr.message);
+        for (const d of (docs || [])) {
+          if (!docMap.has(d.movie_id)) docMap.set(d.movie_id, []);
+          docMap.get(d.movie_id).push({
+            type: d.document_type,
+            filename: d.filename,
+            status: d.status,
+            createdAt: d.created_at
+          });
+        }
+      } catch (docQueryErr) {
+        console.warn('[getPublicMovies] movie_documents query threw (non-fatal):', docQueryErr.message);
       }
     }
+    console.log('[getPublicMovies] docs fetched OK');
 
     // Fetch published shows — try with show_seats join first, fall back without it
     let dbShows = null;
